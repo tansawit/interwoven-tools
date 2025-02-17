@@ -6,12 +6,12 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Copy } from 'lucide-react';
-import { getHighlighter, type Highlighter } from 'shiki';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { getTokenIcon } from '@/lib/token-utils';
 import Image from 'next/image';
 import { useMediaQuery } from '@/lib/hooks/use-media-query';
 import { cn } from '@/lib/utils';
+import { type Highlighter } from 'shiki';
 
 interface PriceChartModalProps {
   isOpen: boolean;
@@ -102,12 +102,20 @@ export function PriceChartModal({
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   React.useEffect(() => {
-    getHighlighter({
-      themes: ['nord'],
-      langs: ['shellscript', 'typescript', 'javascript', 'rust'],
-    })
-      .then(setHighlighter)
-      .catch(console.error);
+    const loadHighlighter = async () => {
+      try {
+        const { getHighlighter } = await import('shiki');
+        const highlighterInstance = await getHighlighter({
+          themes: ['nord'],
+          langs: ['shellscript', 'typescript', 'javascript', 'rust'],
+        });
+        setHighlighter(highlighterInstance);
+      } catch (error) {
+        console.error('Failed to load highlighter:', error);
+      }
+    };
+
+    loadHighlighter();
   }, []);
 
   const getLanguageForTab = (key: string) => {

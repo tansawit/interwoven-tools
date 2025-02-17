@@ -11,11 +11,11 @@ export const ClientLayout = memo(({ children }: { children: React.ReactNode }) =
     <WalletWidgetProvider chainId="initiation-2">
       <div className="relative min-h-screen">
         <Header />
-        <main className="pt-16 min-h-screen bg-dot-pattern overflow-x-hidden">
-          <div className="relative">{children}</div>
+        <main className="pt-16 min-h-screen bg-dot-pattern">
+          <div className="container mx-auto p-6">{children}</div>
         </main>
       </div>
-      <Toaster position="bottom-center" />
+      <Toaster position="bottom-right" />
     </WalletWidgetProvider>
   </ThemeProvider>
 ));

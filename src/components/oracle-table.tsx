@@ -144,7 +144,7 @@ export function OracleTable({ currencyPairs, priceData, isRefreshing }: OracleTa
                   className="rounded-full grayscale contrast-150 brightness-110 group-hover:grayscale-0 group-hover:contrast-100 group-hover:brightness-100 transition-all duration-200"
                 />
               </div>
-              <span className="text-sm sm:text-base">
+              <span className="text-xs sm:text-sm">
                 {baseSymbol}/{quoteSymbol}
               </span>
             </div>
@@ -164,7 +164,7 @@ export function OracleTable({ currencyPairs, priceData, isRefreshing }: OracleTa
           }).format(price);
           return (
             <span
-              className={`text-sm sm:text-base transition-colors duration-500 ${
+              className={`text-xs sm:text-sm transition-colors duration-500 ${
                 isRefreshing ? 'bg-primary/5 rounded px-1.5 sm:px-2 py-0.5 sm:py-1' : ''
               }`}
             >
@@ -179,7 +179,7 @@ export function OracleTable({ currencyPairs, priceData, isRefreshing }: OracleTa
         cell: ({ row }: { row: Row<OracleData> }) => {
           const timestamp = row.getValue('lastUpdated') as string;
           return (
-            <span className="text-sm sm:text-base whitespace-nowrap">
+            <span className="text-xs sm:text-sm whitespace-nowrap">
               {new Date(timestamp).toLocaleString()}
             </span>
           );
@@ -189,7 +189,7 @@ export function OracleTable({ currencyPairs, priceData, isRefreshing }: OracleTa
         accessorKey: 'blockHeight',
         header: 'Block Height',
         cell: ({ row }: { row: Row<OracleData> }) => (
-          <span className="text-sm sm:text-base">{row.getValue('blockHeight')}</span>
+          <span className="text-xs sm:text-sm">{row.getValue('blockHeight')}</span>
         ),
       },
     ],
@@ -318,7 +318,7 @@ export function OracleTable({ currencyPairs, priceData, isRefreshing }: OracleTa
                     }}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className="py-2 sm:py-4">
+                      <TableCell key={cell.id} className="py-1.5 sm:py-2 text-xs sm:text-sm">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 
 interface PageLayoutProps {
   children: React.ReactNode;
-  title: string;
+  title: React.ReactNode;
   description?: string;
   showBackButton?: boolean;
 }
@@ -29,7 +29,7 @@ export function PageLayout({
             </Link>
           )}
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+            <div className="text-3xl font-bold tracking-tight">{title}</div>
             {description && <p className="text-sm text-muted-foreground">{description}</p>}
           </div>
         </div>

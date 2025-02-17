@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Send, DollarSign } from 'lucide-react';
+import { Send, LineChart } from 'lucide-react';
+import { Logo } from '@/components/logo';
 
 export default function Home() {
   return (
@@ -35,10 +36,10 @@ export default function Home() {
                 <div className="space-y-1">
                   <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">Oracle</h2>
                   <p className="text-sm text-muted-foreground">
-                    Interact with oracle services in the Interwoven ecosystem
+                    See Initia oracle price data in real-time
                   </p>
                 </div>
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 transition-transform group-hover:translate-x-1" />
+                <LineChart className="h-5 w-5 sm:h-6 sm:w-6 transition-transform group-hover:translate-x-1" />
               </div>
             </div>
           </Link>

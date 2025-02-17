@@ -94,10 +94,7 @@ export default function OraclePage() {
   }, []); // Empty dependency array since we want this to run only once on mount
 
   return (
-    <PageLayout
-      title="Oracle"
-      description="Interact with oracle services in the Interwoven ecosystem"
-    >
+    <PageLayout title="Oracle" description="See Initia oracle price data in real-time">
       {error ? (
         <div className="p-4 border border-destructive/50 bg-destructive/10 rounded-lg">
           <p className="text-sm text-destructive">{error}</p>
