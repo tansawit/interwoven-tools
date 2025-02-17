@@ -1,0 +1,29 @@
+React Best Practices:
+
+Use functional components and hooks instead of class components
+Implement proper React memo and useMemo for performance optimization
+Follow the React hooks rules strictly to avoid common pitfalls
+Utilize context API for efficient state management across components
+Implement proper error boundaries to handle and display errors gracefully
+
+Next.js Standards:
+
+Utilize Next.js App Router for better performance and improved routing
+Implement proper error boundaries to handle server-side and client-side errors
+Use proper data fetching patterns with suspense for improved loading states
+Leverage Next.js built-in optimizations like code splitting and image optimization
+Implement server-side rendering or static generation where appropriate for SEO benefits
+
+General Standards:
+
+Keep components small and focused on a single responsibility
+Follow proper state management patterns, choosing the right tool for the job (e.g., Redux, Context API)
+Implement proper testing practices, including unit tests and integration tests
+Use environment variables for sensitive information and configuration
+Implement proper logging and monitoring for production applications
+Follow semantic versioning for your project and its dependencies
+Regularly update dependencies to ensure security and performance improvements
+
+Use Shadcn UI for components wherever possible.
+
+Always use Bun for the project.
