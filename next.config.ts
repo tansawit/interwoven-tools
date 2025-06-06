@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'registry.testnet.initia.xyz',
       },
+      {
+        protocol: 'https',
+        hostname: 'registry.initia.xyz',
+      },
     ],
   },
 };

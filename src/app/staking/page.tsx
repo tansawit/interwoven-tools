@@ -195,20 +195,22 @@ export default function StakingMonitor() {
   };
 
   return (
-    <div className="container mx-auto py-6 sm:py-8 px-4 max-w-7xl">
-      <div className="space-y-6 sm:space-y-8">
+    <div className="container mx-auto py-4 sm:py-6 lg:py-8 px-4 max-w-7xl">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
         {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Staking</h1>
-          <p className="text-muted-foreground text-base sm:text-lg px-4">
+        <div className="text-center space-y-2 sm:space-y-4">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold tracking-tight">
+            Staking
+          </h1>
+          <p className="text-muted-foreground text-xs sm:text-base lg:text-lg px-2 sm:px-4">
             Monitoring of INIT and Enshrined Liquidity pools
           </p>
 
           {/* Status Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              <span className="text-xs sm:text-sm">
+              <Activity className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span>
                 {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Loading...'}
               </span>
             </div>
@@ -217,9 +219,9 @@ export default function StakingMonitor() {
               size="sm"
               onClick={fetchData}
               disabled={loading}
-              className="flex items-center gap-2 text-xs sm:text-sm"
+              className="flex items-center gap-2 text-xs"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -227,9 +229,9 @@ export default function StakingMonitor() {
 
         {/* Loading State */}
         {loading && !data && (
-          <div className="text-center py-12">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-            <p className="text-muted-foreground text-sm sm:text-base">
+          <div className="text-center py-8 sm:py-12">
+            <RefreshCw className="h-6 w-6 sm:h-8 sm:w-8 animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground text-xs sm:text-sm lg:text-base">
               Loading staking data and prices...
             </p>
           </div>
@@ -238,9 +240,9 @@ export default function StakingMonitor() {
         {/* Error State */}
         {error && (
           <Card className="border-red-200 dark:border-red-800">
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 sm:pt-6">
               <div className="text-center text-red-600 dark:text-red-400">
-                <p className="font-semibold text-sm sm:text-base">Error loading data</p>
+                <p className="font-semibold text-xs sm:text-sm lg:text-base">Error loading data</p>
                 <p className="text-xs sm:text-sm mt-1">{error}</p>
               </div>
             </CardContent>
@@ -249,9 +251,9 @@ export default function StakingMonitor() {
 
         {/* Staking Data */}
         {data && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Mobile Cards View */}
-            <div className="block lg:hidden space-y-4">
+            <div className="block lg:hidden space-y-3 sm:space-y-4">
               {data.pool.bonded_tokens
                 .sort((a, b) => {
                   // Always show INIT (uinit) first
@@ -284,28 +286,28 @@ export default function StakingMonitor() {
                   );
 
                   return (
-                    <Card key={bondedToken.denom} className="p-4">
+                    <Card key={bondedToken.denom} className="p-3 sm:p-4">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-semibold text-lg">
+                          <h3 className="font-semibold text-base sm:text-lg">
                             {getTokenName(bondedToken.denom)}
                           </h3>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-xs sm:text-sm text-muted-foreground">
                             {(votingWeight * 100).toFixed(2)}% Voting Power
                           </span>
                         </div>
 
                         <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs sm:text-sm">
                             <span className="text-muted-foreground">Staked:</span>
-                            <span className="font-mono text-green-600 dark:text-green-400 text-xs">
+                            <span className="font-mono text-green-600 dark:text-green-400 text-xs break-all text-right">
                               {formatAmountWithUSD(bondedToken.amount, bondedToken.denom)}
                             </span>
                           </div>
 
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs sm:text-sm">
                             <span className="text-muted-foreground">Unstaking:</span>
-                            <span className="font-mono text-orange-600 dark:text-orange-400 text-xs">
+                            <span className="font-mono text-orange-600 dark:text-orange-400 text-xs break-all text-right">
                               {formatAmountWithUSD(
                                 notBondedToken?.amount || '0',
                                 bondedToken.denom
@@ -313,16 +315,16 @@ export default function StakingMonitor() {
                             </span>
                           </div>
 
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between text-xs sm:text-sm">
                             <span className="text-muted-foreground">INIT Unstaking:</span>
-                            <span className="font-mono text-blue-600 dark:text-blue-400 text-xs">
+                            <span className="font-mono text-blue-600 dark:text-blue-400 text-xs break-all text-right">
                               {initEquivalent}
                             </span>
                           </div>
 
-                          <div className="flex justify-between text-sm font-semibold border-t pt-2">
+                          <div className="flex justify-between text-xs sm:text-sm font-semibold border-t pt-2">
                             <span>Total:</span>
-                            <span className="font-mono text-xs">
+                            <span className="font-mono text-xs break-all text-right">
                               {new Intl.NumberFormat('en-US', {
                                 minimumFractionDigits: 2,
                                 maximumFractionDigits: 2,

@@ -13,12 +13,12 @@ export function Navigation() {
   }
 
   return (
-    <div className="container mx-auto py-4 sm:py-6 px-4">
+    <div className="container mx-auto py-3 sm:py-4 lg:py-6 px-4">
       <Link href="/">
         <Button
           variant="outline"
           size="sm"
-          className="button button-outline transition-colors duration-300 text-foreground/80 hover:text-background text-sm"
+          className="button button-outline transition-colors duration-300 text-foreground/80 hover:text-background text-xs sm:text-sm"
         >
           ← Back to Tools
         </Button>

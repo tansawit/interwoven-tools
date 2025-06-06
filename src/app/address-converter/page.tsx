@@ -70,27 +70,27 @@ export default function AddressConverterPage() {
   };
 
   return (
-    <div className="container mx-auto py-12 sm:py-20 px-4 max-w-3xl">
-      <div className="space-y-8 sm:space-y-12">
+    <div className="container mx-auto py-8 sm:py-12 lg:py-20 px-4 max-w-3xl">
+      <div className="space-y-6 sm:space-y-8 lg:space-y-12">
         <div className="text-center">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight mb-3 sm:mb-4 lg:mb-6">
             Address Converter
           </h1>
-          <p className="text-muted-foreground text-base sm:text-lg max-w-xl mx-auto px-4">
+          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg max-w-xl mx-auto px-2 sm:px-4">
             Convert between Ethereum (0x) addresses and bech32 (init) addresses
           </p>
         </div>
 
         <Card className="border border-border bg-card/50 backdrop-blur-sm">
-          <CardHeader className="border-b border-border pb-4 sm:pb-6">
-            <CardTitle className="text-xl sm:text-2xl">Conversion Tool</CardTitle>
-            <CardDescription className="text-muted-foreground mt-2 text-sm sm:text-base">
+          <CardHeader className="border-b border-border pb-3 sm:pb-4 lg:pb-6">
+            <CardTitle className="text-lg sm:text-xl lg:text-2xl">Conversion Tool</CardTitle>
+            <CardDescription className="text-muted-foreground mt-2 text-xs sm:text-sm lg:text-base">
               Select the conversion direction and enter the address
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-4 sm:pt-6">
+          <CardContent className="pt-3 sm:pt-4 lg:pt-6">
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6 sm:mb-8 tabs-list">
+              <TabsList className="grid w-full grid-cols-2 mb-4 sm:mb-6 lg:mb-8 tabs-list">
                 <TabsTrigger value="eth-to-bech32" className="tab text-xs sm:text-sm">
                   0x → bech32
                 </TabsTrigger>
@@ -98,21 +98,21 @@ export default function AddressConverterPage() {
                   bech32 → 0x
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="eth-to-bech32" className="space-y-4 sm:space-y-6">
+              <TabsContent value="eth-to-bech32" className="space-y-3 sm:space-y-4 lg:space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                  <label className="block text-xs sm:text-sm font-medium mb-2 text-foreground">
                     Ethereum Address
                   </label>
                   <Input
                     value={ethAddress}
                     onChange={(e) => setEthAddress(e.target.value)}
                     placeholder="0x..."
-                    className="font-mono bg-background border-border text-sm"
+                    className="font-mono bg-background border-border text-xs sm:text-sm"
                   />
                 </div>
 
-                <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-border">
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                <div className="mt-3 sm:mt-4 lg:mt-6 pt-3 sm:pt-4 lg:pt-6 border-t border-border">
+                  <label className="block text-xs sm:text-sm font-medium mb-2 text-foreground">
                     {prefix} Address
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -121,7 +121,7 @@ export default function AddressConverterPage() {
                       readOnly
                       disabled={!bech32Address}
                       placeholder={`${prefix}1...`}
-                      className="font-mono bg-background border-border text-sm"
+                      className="font-mono bg-background border-border text-xs sm:text-sm"
                     />
                     {bech32Address && (
                       <Button
@@ -139,28 +139,28 @@ export default function AddressConverterPage() {
 
                 <Button
                   onClick={handleEthToBech32Conversion}
-                  className="w-full button button-primary mt-4 sm:mt-6 text-sm"
+                  className="w-full button button-primary mt-3 sm:mt-4 lg:mt-6 text-xs sm:text-sm"
                   variant="outline"
                 >
                   Convert to {prefix} Address
                 </Button>
               </TabsContent>
 
-              <TabsContent value="bech32-to-eth" className="space-y-4 sm:space-y-6">
+              <TabsContent value="bech32-to-eth" className="space-y-3 sm:space-y-4 lg:space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                  <label className="block text-xs sm:text-sm font-medium mb-2 text-foreground">
                     {prefix} Address
                   </label>
                   <Input
                     value={bech32Address}
                     onChange={(e) => setBech32Address(e.target.value)}
                     placeholder={`${prefix}1...`}
-                    className="font-mono bg-background border-border text-sm"
+                    className="font-mono bg-background border-border text-xs sm:text-sm"
                   />
                 </div>
 
-                <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-border">
-                  <label className="block text-sm font-medium mb-2 text-foreground">
+                <div className="mt-3 sm:mt-4 lg:mt-6 pt-3 sm:pt-4 lg:pt-6 border-t border-border">
+                  <label className="block text-xs sm:text-sm font-medium mb-2 text-foreground">
                     Ethereum Address
                   </label>
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -169,7 +169,7 @@ export default function AddressConverterPage() {
                       readOnly
                       disabled={!ethAddress}
                       placeholder="0x..."
-                      className="font-mono bg-background border-border text-sm"
+                      className="font-mono bg-background border-border text-xs sm:text-sm"
                     />
                     {ethAddress && (
                       <Button
@@ -187,7 +187,7 @@ export default function AddressConverterPage() {
 
                 <Button
                   onClick={handleBech32ToEthConversion}
-                  className="w-full button button-primary mt-4 sm:mt-6 text-sm"
+                  className="w-full button button-primary mt-3 sm:mt-4 lg:mt-6 text-xs sm:text-sm"
                   variant="outline"
                 >
                   Convert to Ethereum Address
@@ -196,7 +196,7 @@ export default function AddressConverterPage() {
             </Tabs>
 
             {error && (
-              <div className="mt-4 sm:mt-6 p-3 sm:p-4 border border-destructive/50 bg-destructive/10 text-destructive text-xs sm:text-sm rounded">
+              <div className="mt-3 sm:mt-4 lg:mt-6 p-3 sm:p-4 border border-destructive/50 bg-destructive/10 text-destructive text-xs sm:text-sm rounded">
                 {error}
               </div>
             )}

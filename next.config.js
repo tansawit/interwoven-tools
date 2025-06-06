@@ -6,8 +6,12 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'registry.testnet.initia.xyz',
       },
+      {
+        protocol: 'https',
+        hostname: 'registry.initia.xyz',
+      },
     ],
   },
-}
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;

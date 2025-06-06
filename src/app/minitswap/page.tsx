@@ -78,20 +78,22 @@ export default function MinitswapMonitor() {
   };
 
   return (
-    <div className="container mx-auto py-6 sm:py-8 px-4 max-w-7xl">
-      <div className="space-y-6 sm:space-y-8">
+    <div className="container mx-auto py-4 sm:py-6 lg:py-8 px-4 max-w-7xl">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
         {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Minitswap</h1>
-          <p className="text-muted-foreground text-base sm:text-lg px-4">
+        <div className="text-center space-y-2 sm:space-y-4">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold tracking-tight">
+            Minitswap
+          </h1>
+          <p className="text-muted-foreground text-xs sm:text-base lg:text-lg px-2 sm:px-4">
             Monitoring of Minitswap pools and balances
           </p>
 
           {/* Status Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-xs sm:text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4" />
-              <span className="text-xs sm:text-sm">
+              <Activity className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span>
                 {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Loading...'}
               </span>
             </div>
@@ -100,9 +102,9 @@ export default function MinitswapMonitor() {
               size="sm"
               onClick={fetchData}
               disabled={loading}
-              className="flex items-center gap-2 text-xs sm:text-sm"
+              className="flex items-center gap-2 text-xs"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3 w-3 sm:h-4 sm:w-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -110,18 +112,20 @@ export default function MinitswapMonitor() {
 
         {/* Loading State */}
         {loading && !data && (
-          <div className="text-center py-12">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-            <p className="text-muted-foreground text-sm sm:text-base">Loading pool data...</p>
+          <div className="text-center py-8 sm:py-12">
+            <RefreshCw className="h-6 w-6 sm:h-8 sm:w-8 animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground text-xs sm:text-sm lg:text-base">
+              Loading pool data...
+            </p>
           </div>
         )}
 
         {/* Error State */}
         {error && (
           <Card className="border-red-200 dark:border-red-800">
-            <CardContent className="pt-6">
+            <CardContent className="pt-4 sm:pt-6">
               <div className="text-center text-red-600 dark:text-red-400">
-                <p className="font-semibold text-sm sm:text-base">Error loading data</p>
+                <p className="font-semibold text-xs sm:text-sm lg:text-base">Error loading data</p>
                 <p className="text-xs sm:text-sm mt-1">{error}</p>
               </div>
             </CardContent>
@@ -130,19 +134,23 @@ export default function MinitswapMonitor() {
 
         {/* Pool Data */}
         {data && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Mobile Cards View */}
-            <div className="block lg:hidden space-y-4">
+            <div className="block lg:hidden space-y-3 sm:space-y-4">
               {data.map((pool) => {
                 const firstSwapPrice = pool.swaps.length > 0 ? pool.swaps[0].initPrice : NaN;
 
                 return (
-                  <Card key={pool.bridgeId} className="p-4">
+                  <Card key={pool.bridgeId} className="p-3 sm:p-4">
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-semibold text-lg">{pool.prettyName}</h3>
-                          <p className="text-xs text-muted-foreground font-mono">{pool.bridgeId}</p>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-base sm:text-lg truncate">
+                            {pool.prettyName}
+                          </h3>
+                          <p className="text-xs text-muted-foreground font-mono break-all">
+                            {pool.bridgeId}
+                          </p>
                         </div>
                         <Button
                           variant="outline"
@@ -151,29 +159,29 @@ export default function MinitswapMonitor() {
                             setSelectedPool(pool);
                             setIsModalOpen(true);
                           }}
-                          className="text-xs"
+                          className="text-xs shrink-0 ml-2"
                         >
                           Details
                         </Button>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
                         <div>
                           <span className="text-muted-foreground block">Virtual Pool (L1)</span>
-                          <span className="font-mono text-xs">
+                          <span className="font-mono text-xs break-all">
                             {formatNumber(pool.virtualPoolBalanceL1)}
                           </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground block">Virtual Pool (L2)</span>
-                          <span className="font-mono text-xs">
+                          <span className="font-mono text-xs break-all">
                             {formatNumber(pool.virtualPoolBalanceL2)}
                           </span>
                         </div>
                         <div>
                           <span className="text-muted-foreground block">Peg Keeper (L1)</span>
                           <span
-                            className={`font-mono text-xs ${getBalanceColor(
+                            className={`font-mono text-xs break-all ${getBalanceColor(
                               pool.pegKeeperBalanceL1
                             )}`}
                           >
@@ -183,7 +191,7 @@ export default function MinitswapMonitor() {
                         <div>
                           <span className="text-muted-foreground block">Peg Keeper (L2)</span>
                           <span
-                            className={`font-mono text-xs ${getBalanceColor(
+                            className={`font-mono text-xs break-all ${getBalanceColor(
                               pool.pegKeeperBalanceL2
                             )}`}
                           >
@@ -193,8 +201,10 @@ export default function MinitswapMonitor() {
                       </div>
 
                       <div className="flex justify-between items-center border-t pt-3">
-                        <span className="text-muted-foreground text-sm">Swap Price (5K):</span>
-                        <span className="font-mono text-sm">
+                        <span className="text-muted-foreground text-xs sm:text-sm">
+                          Swap Price (5K):
+                        </span>
+                        <span className="font-mono text-xs sm:text-sm break-all text-right">
                           {isNaN(firstSwapPrice) ? 'N/A' : formatNumber(firstSwapPrice)}
                         </span>
                       </div>
@@ -279,15 +289,15 @@ export default function MinitswapMonitor() {
 
         {/* Modal for Swap Details */}
         {isModalOpen && selectedPool && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <Card className="w-full max-w-4xl max-h-[90vh] overflow-hidden bg-black border-border">
-              <CardHeader className="border-b border-border">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div>
-                    <CardTitle className="text-lg sm:text-xl">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50">
+            <Card className="w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden bg-black border-border">
+              <CardHeader className="border-b border-border p-3 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="text-base sm:text-lg lg:text-xl truncate">
                       {selectedPool.prettyName} - Swap Details
                     </CardTitle>
-                    <CardDescription className="font-mono text-xs sm:text-sm">
+                    <CardDescription className="font-mono text-xs sm:text-sm break-all">
                       {selectedPool.bridgeId}
                     </CardDescription>
                   </div>
@@ -295,30 +305,36 @@ export default function MinitswapMonitor() {
                     variant="outline"
                     size="sm"
                     onClick={() => setIsModalOpen(false)}
-                    className="text-xs"
+                    className="text-xs shrink-0"
                   >
                     Close
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="overflow-auto p-4 sm:p-6">
+              <CardContent className="overflow-auto p-3 sm:p-4 lg:p-6">
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs sm:text-sm">
                     <thead>
                       <tr className="border-b">
-                        <th className="text-left p-2">Offer Amount</th>
-                        <th className="text-left p-2">Return Amount</th>
-                        <th className="text-left p-2">Fee Amount</th>
-                        <th className="text-left p-2">Effective Price</th>
+                        <th className="text-left p-1 sm:p-2">Offer Amount</th>
+                        <th className="text-left p-1 sm:p-2">Return Amount</th>
+                        <th className="text-left p-1 sm:p-2">Fee Amount</th>
+                        <th className="text-left p-1 sm:p-2">Effective Price</th>
                       </tr>
                     </thead>
                     <tbody>
                       {selectedPool.swaps.map((swap, index) => (
                         <tr key={index} className="border-b">
-                          <td className="p-2 font-mono">{formatNumber(swap.offerAmount)}</td>
-                          <td className="p-2 font-mono">{formatNumber(swap.returnAmount)}</td>
-                          <td className="p-2 font-mono">{formatNumber(swap.feeAmount)}</td>
-                          <td className="p-2 font-mono">
+                          <td className="p-1 sm:p-2 font-mono break-all">
+                            {formatNumber(swap.offerAmount)}
+                          </td>
+                          <td className="p-1 sm:p-2 font-mono break-all">
+                            {formatNumber(swap.returnAmount)}
+                          </td>
+                          <td className="p-1 sm:p-2 font-mono break-all">
+                            {formatNumber(swap.feeAmount)}
+                          </td>
+                          <td className="p-1 sm:p-2 font-mono break-all">
                             {isNaN(swap.initPrice) ? 'N/A' : formatNumber(swap.initPrice)}
                           </td>
                         </tr>

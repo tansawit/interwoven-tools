@@ -433,11 +433,13 @@ export default function AssetRegistryPage() {
   };
 
   return (
-    <div className="container mx-auto py-4 sm:py-6 px-4 max-w-7xl">
-      <div className="space-y-4 sm:space-y-6">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+    <div className="container mx-auto py-3 sm:py-4 lg:py-6 px-4 max-w-7xl">
+      <div className="space-y-3 sm:space-y-4 lg:space-y-6">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Asset Registry</h1>
+            <h1 className="text-lg sm:text-xl lg:text-2xl font-bold tracking-tight">
+              Asset Registry
+            </h1>
             <p className="text-xs sm:text-sm text-muted-foreground">
               Add a new entry to a rollup&apos;s assetlist.json based on the Initia Registry schema.
             </p>
@@ -445,7 +447,7 @@ export default function AssetRegistryPage() {
 
           <div className="w-full lg:w-1/3">
             <Select onValueChange={handleChainSelect} value={selectedChain}>
-              <SelectTrigger className="w-full bg-black">
+              <SelectTrigger className="w-full bg-black text-xs sm:text-sm">
                 <SelectValue placeholder="Select a chain" />
               </SelectTrigger>
               <SelectContent className="bg-black border border-border">
@@ -466,7 +468,9 @@ export default function AssetRegistryPage() {
                         />
                       </div>
                     )}
-                    <span className="text-sm">{chain.pretty_name || chain.chain_name}</span>
+                    <span className="text-xs sm:text-sm">
+                      {chain.pretty_name || chain.chain_name}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -475,12 +479,14 @@ export default function AssetRegistryPage() {
         </div>
 
         {selectedChain && (
-          <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-6">
+          <div className="flex flex-col lg:grid lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
             {/* JSON Preview - Shows first on mobile */}
             <div className="order-2 lg:order-1">
-              <Card className="h-[300px] sm:h-[400px] lg:h-[36rem] flex flex-col">
-                <CardHeader className="py-2 px-4">
-                  <CardTitle className="text-base sm:text-lg">Asset List Preview</CardTitle>
+              <Card className="h-[250px] sm:h-[350px] lg:h-[36rem] flex flex-col">
+                <CardHeader className="py-2 px-3 sm:px-4">
+                  <CardTitle className="text-sm sm:text-base lg:text-lg">
+                    Asset List Preview
+                  </CardTitle>
                   <CardDescription className="text-xs">
                     {currentAssetList
                       ? 'Preview changes to the asset list'
@@ -488,7 +494,10 @@ export default function AssetRegistryPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1 overflow-hidden p-2">
-                  <ScrollArea ref={scrollRef} className="h-full w-full rounded-md border p-2">
+                  <ScrollArea
+                    ref={scrollRef}
+                    className="h-full w-full rounded-md border p-1 sm:p-2"
+                  >
                     <pre className="text-xs overflow-x-auto">
                       {currentAssetList &&
                         generateDiff()?.map((part: DiffPart, index: number) => (
@@ -513,39 +522,41 @@ export default function AssetRegistryPage() {
 
             {/* Form - Shows second on mobile */}
             <div className="order-1 lg:order-2">
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <Card className="h-[500px] sm:h-[600px] lg:h-[36rem] overflow-auto">
-                  <CardHeader className="py-2 px-4">
-                    <CardTitle className="text-base sm:text-lg">New Asset Information</CardTitle>
+              <form onSubmit={handleSubmit} className="space-y-2 sm:space-y-3">
+                <Card className="h-[400px] sm:h-[500px] lg:h-[36rem] overflow-auto">
+                  <CardHeader className="py-2 px-3 sm:px-4">
+                    <CardTitle className="text-sm sm:text-base lg:text-lg">
+                      New Asset Information
+                    </CardTitle>
                     <CardDescription className="text-xs">
                       Enter the details for the new asset.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-3 sm:p-4 overflow-y-auto">
+                  <CardContent className="p-2 sm:p-3 lg:p-4 overflow-y-auto">
                     <Tabs defaultValue="basic" className="w-full">
-                      <TabsList className="grid w-full grid-cols-3 bg-zinc-900 rounded-md p-1 text-xs sm:text-sm">
+                      <TabsList className="grid w-full grid-cols-3 bg-zinc-900 rounded-md p-1">
                         <TabsTrigger
                           value="basic"
-                          className="transition-all hover:bg-zinc-800 data-[state=active]:bg-zinc-600 data-[state=active]:text-white rounded-md text-xs sm:text-sm"
+                          className="transition-all hover:bg-zinc-800 data-[state=active]:bg-zinc-600 data-[state=active]:text-white rounded-md text-xs"
                         >
                           Basic
                         </TabsTrigger>
                         <TabsTrigger
                           value="denom"
-                          className="transition-all hover:bg-zinc-800 data-[state=active]:bg-zinc-600 data-[state=active]:text-white rounded-md text-xs sm:text-sm"
+                          className="transition-all hover:bg-zinc-800 data-[state=active]:bg-zinc-600 data-[state=active]:text-white rounded-md text-xs"
                         >
                           Denoms
                         </TabsTrigger>
                         <TabsTrigger
                           value="metadata"
-                          className="transition-all hover:bg-zinc-800 data-[state=active]:bg-zinc-600 data-[state=active]:text-white rounded-md text-xs sm:text-sm"
+                          className="transition-all hover:bg-zinc-800 data-[state=active]:bg-zinc-600 data-[state=active]:text-white rounded-md text-xs"
                         >
                           Meta
                         </TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="basic">
-                        <div className="space-y-3 pt-3">
+                        <div className="space-y-2 sm:space-y-3 pt-2 sm:pt-3">
                           <div>
                             <label htmlFor="asset.name" className="block text-xs font-medium mb-1">
                               Name<span className="text-red-500">*</span>
@@ -556,7 +567,7 @@ export default function AssetRegistryPage() {
                               value={formData.asset.name}
                               onChange={handleChange}
                               placeholder="e.g., Bitcoin"
-                              className={`h-8 text-xs sm:text-sm ${
+                              className={`h-7 sm:h-8 text-xs ${
                                 formErrors.name ? 'border-red-500' : ''
                               }`}
                             />
