@@ -28,16 +28,16 @@ const tools: Tool[] = [
     path: '/staking',
   },
   {
-    id: 'registry',
-    title: 'Asset Registry',
-    description: 'Add new assets to rollup assetlist.json files',
-    path: '/registry/assets',
-  },
-  {
     id: 'vip-scores',
     title: 'VIP Scores',
     description: 'Track and monitor VIP scores across the Interwoven ecosystem',
     path: '/vip-scores',
+  },
+  {
+    id: 'block-time',
+    title: 'Block Time Calculator',
+    description: 'Calculate block times, estimate future blocks, and analyze blockchain timing',
+    path: '/block-time',
   },
   // Add more tools here in the future
 ];

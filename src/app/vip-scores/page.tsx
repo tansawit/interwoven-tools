@@ -1,17 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { convertEthToBech32, convertBech32ToEth } from '@/lib/address-utils';
+import { useChains } from '@/lib/hooks/useChains';
+import { ChainSelector } from '@/components/ChainSelector';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   RefreshCw,
   Activity,
@@ -36,28 +30,6 @@ interface VIPStatus {
   data: BridgeData[];
 }
 
-interface Chain {
-  chain_name: string;
-  pretty_name: string;
-  chain_id: string;
-  network_type: string;
-  apis?: {
-    rest?: Array<{ address: string }>;
-    rpc?: Array<{ address: string }>;
-    'json-rpc'?: Array<{ address: string }>;
-  };
-  metadata?: {
-    op_bridge_id?: string;
-    minitia?: {
-      type: string;
-      version: string;
-    };
-  };
-  logo_URIs?: {
-    png?: string;
-  };
-}
-
 interface VIPScoreEntry {
   address: string;
   score: string;
@@ -65,17 +37,30 @@ interface VIPScoreEntry {
 }
 
 export default function VIPScores() {
+  // Use shared chains hook
+  const {
+    chains,
+    selectedChain,
+    setSelectedChain,
+    loading: chainsLoading,
+    error: chainsError,
+  } = useChains({
+    filter: (chain) =>
+      !!(chain.chain_name.toLowerCase() !== 'initia' && chain.metadata?.minitia?.type),
+    autoSelect: false,
+  });
+
   const [vipStatus, setVipStatus] = useState<VIPStatus | null>(null);
-  const [chains, setChains] = useState<Chain[]>([]);
-  const [selectedChain, setSelectedChain] = useState<string>('');
   const [vipScores, setVipScores] = useState<VIPScoreEntry[]>([]);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
-  const [chainsLoading, setChainsLoading] = useState<boolean>(true);
   const [scoresLoading, setScoresLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [searchAddress, setSearchAddress] = useState<string>('');
+
+  // Combine errors
+  const combinedError = chainsError || error;
 
   const SCORES_PER_PAGE = 20;
 
@@ -101,32 +86,6 @@ export default function VIPScores() {
       setError(errorMessage);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchChains = async () => {
-    setChainsLoading(true);
-    try {
-      console.log('Fetching chains from registry...');
-      const response = await fetch('https://registry.initia.xyz/chains.json');
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result: Chain[] = await response.json();
-      console.log('Chains received:', result);
-
-      // Filter out "Initia" chains and only include chains with VM types
-      const filteredChains = result.filter(
-        (chain) => chain.chain_name.toLowerCase() !== 'initia' && chain.metadata?.minitia?.type
-      );
-
-      setChains(filteredChains);
-    } catch (e: unknown) {
-      console.error('Failed to fetch chains:', e);
-    } finally {
-      setChainsLoading(false);
     }
   };
 
@@ -690,7 +649,6 @@ Original error: ${result.error.message || JSON.stringify(result.error)}`);
 
   useEffect(() => {
     fetchVIPStatus();
-    fetchChains();
   }, []);
 
   useEffect(() => {
@@ -730,8 +688,8 @@ Original error: ${result.error.message || JSON.stringify(result.error)}`);
   };
 
   return (
-    <div className="container mx-auto py-4 sm:py-6 lg:py-8 px-4 max-w-7xl">
-      <div className="space-y-4 sm:space-y-6 lg:space-y-8">
+    <div className="container mx-auto py-6 sm:py-8 px-4 max-w-7xl">
+      <div className="space-y-6 sm:space-y-8">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold tracking-tight mb-2 sm:mb-4">
@@ -763,11 +721,11 @@ Original error: ${result.error.message || JSON.stringify(result.error)}`);
         </div>
 
         {/* Error State */}
-        {error && (
+        {combinedError && (
           <Card className="border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/20">
             <CardContent className="pt-4 sm:pt-6">
               <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                <span className="text-xs sm:text-sm">⚠️ Error: {error}</span>
+                <span className="text-xs sm:text-sm">⚠️ Error: {combinedError}</span>
               </div>
             </CardContent>
           </Card>
@@ -865,39 +823,13 @@ Original error: ${result.error.message || JSON.stringify(result.error)}`);
                     <p className="text-xs sm:text-sm text-muted-foreground mb-2 sm:mb-3">
                       Select a chain to view current VIP scores for this stage
                     </p>
-                    <Select value={selectedChain} onValueChange={setSelectedChain}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue
-                          placeholder={chainsLoading ? 'Loading chains...' : 'Select a chain'}
-                        />
-                      </SelectTrigger>
-                      <SelectContent className="bg-black border border-border max-h-64">
-                        {chains.map((chain) => (
-                          <SelectItem
-                            key={chain.chain_name}
-                            value={chain.chain_name}
-                            className="focus:bg-gray-800 focus:text-white"
-                          >
-                            <div className="flex items-center gap-2 sm:gap-3">
-                              {chain.logo_URIs?.png && (
-                                <div className="relative w-5 h-5 sm:w-6 sm:h-6 shrink-0">
-                                  <Image
-                                    src={chain.logo_URIs.png}
-                                    alt={chain.chain_name}
-                                    width={24}
-                                    height={24}
-                                    className="rounded-full"
-                                  />
-                                </div>
-                              )}
-                              <span className="text-white text-sm">
-                                {chain.pretty_name || chain.chain_name}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ChainSelector
+                      chains={chains}
+                      selectedChain={selectedChain}
+                      onChainChange={setSelectedChain}
+                      loading={chainsLoading}
+                      placeholder="Select a chain"
+                    />
                   </div>
 
                   {selectedChain && (
