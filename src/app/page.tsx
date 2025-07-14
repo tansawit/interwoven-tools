@@ -39,6 +39,12 @@ const tools: Tool[] = [
     description: 'Calculate block times, estimate future blocks, and analyze blockchain timing',
     path: '/block-time',
   },
+  {
+    id: 'assets-distribution',
+    title: 'Assets Distribution',
+    description: 'View token balances across all chains in the Initia ecosystem',
+    path: '/assets-distribution',
+  },
   // Add more tools here in the future
 ];
 
