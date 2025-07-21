@@ -45,6 +45,12 @@ const tools: Tool[] = [
     description: 'View token balances across all chains in the Initia ecosystem',
     path: '/assets-distribution',
   },
+  {
+    id: 'lst-pools',
+    title: 'LST Pools',
+    description: 'View price charts and liquidity data for INIT liquid staking token pools',
+    path: '/lst-pools',
+  },
   // Add more tools here in the future
 ];
 
