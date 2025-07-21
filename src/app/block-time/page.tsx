@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -120,7 +120,7 @@ export default function BlockTimeCalculator() {
     }
   };
 
-  const fetchCurrentBlock = async () => {
+  const fetchCurrentBlock = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -160,7 +160,7 @@ export default function BlockTimeCalculator() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getSelectedChain]);
 
   const calculateBlockDifference = () => {
     const from = parseInt(fromBlock);
@@ -305,7 +305,7 @@ export default function BlockTimeCalculator() {
     if (selectedChain) {
       fetchCurrentBlock();
     }
-  }, [selectedChain]);
+  }, [selectedChain, fetchCurrentBlock]);
 
   return (
     <div className="container mx-auto py-6 sm:py-8 px-4 max-w-5xl">

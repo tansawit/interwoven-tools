@@ -16,7 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Interwoven Tools',
   description: 'A collection of useful tools for the Interwoven ecosystem',
-  viewport: 'width=device-width, initial-scale=1',
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({

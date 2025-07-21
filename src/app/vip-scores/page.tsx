@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { convertEthToBech32, convertBech32ToEth } from '@/lib/address-utils';
 import { useChains } from '@/lib/hooks/useChains';
 import { ChainSelector } from '@/components/ChainSelector';
@@ -89,7 +89,7 @@ export default function VIPScores() {
     }
   };
 
-  const fetchVIPScores = async (chainName: string) => {
+  const fetchVIPScores = useCallback(async (chainName: string) => {
     if (!vipStatus) return;
 
     setScoresLoading(true);
@@ -193,7 +193,7 @@ export default function VIPScores() {
     } finally {
       setScoresLoading(false);
     }
-  };
+  }, [vipStatus, chains]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // VM-specific score fetching functions
   const getMoveScores = async (
@@ -323,7 +323,7 @@ export default function VIPScores() {
     return res;
   };
 
-  const getEvmScores = async (
+  const getEvmScores = useCallback(async (
     chainName: string,
     contractAddr: string,
     stage: number
@@ -470,7 +470,7 @@ Original error: ${result.error.message || JSON.stringify(result.error)}`);
 
     console.log(`EVM getScores returning ${Object.keys(res).length} scores`);
     return res;
-  };
+  }, [chains]);
 
   // Helper function to decode EVM response data
   const decodeEvmScoresResponse = (data: string): Array<{ addr: string; score: string }> => {
@@ -655,7 +655,7 @@ Original error: ${result.error.message || JSON.stringify(result.error)}`);
     if (selectedChain && vipStatus) {
       fetchVIPScores(selectedChain);
     }
-  }, [selectedChain, vipStatus]);
+  }, [selectedChain, vipStatus, fetchVIPScores]);
 
   const formatLargeNumber = (value: number) => {
     if (value >= 1e9) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export interface Chain {
   chain_name: string;
@@ -37,7 +37,7 @@ export function useChains(options: UseChainsOptions = {}) {
 
   const { filter, autoSelect = true } = options;
 
-  const fetchChains = async () => {
+  const fetchChains = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -70,7 +70,7 @@ export function useChains(options: UseChainsOptions = {}) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter, autoSelect, selectedChain]);
 
   const getSelectedChain = () =>
     chains.find((chain) => chain.chain_name === selectedChain) || chains[0];
@@ -81,7 +81,7 @@ export function useChains(options: UseChainsOptions = {}) {
 
   useEffect(() => {
     fetchChains();
-  }, []);
+  }, [fetchChains]);
 
   return {
     chains,

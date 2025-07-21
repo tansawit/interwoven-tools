@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -46,10 +46,7 @@ interface AssetList {
   assets: Asset[];
 }
 
-interface PriceData {
-  time: string;
-  price: number;
-}
+
 
 interface DashboardDataPoint {
   liquidity: number;
@@ -73,7 +70,17 @@ interface ChartData {
 }
 
 // Custom Tooltip Component
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface TooltipProps {
+  active?: boolean;
+  payload?: Array<{
+    dataKey: string;
+    value: string | number;
+    color: string;
+  }>;
+  label?: string;
+}
+
+const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div 
@@ -89,7 +96,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="font-medium mb-2" style={{ color: 'var(--card-foreground)' }}>
           {label}
         </p>
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry, index: number) => (
           <p key={index} style={{ color: entry.color, marginBottom: '4px' }}>
             <span className="font-medium">{entry.dataKey}:</span>{' '}
             <span className="font-mono">
@@ -115,21 +122,7 @@ export default function LSTPoolsPage() {
   const [timeRange, setTimeRange] = useState<string>('week');
   const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    fetchAssetRegistry();
-  }, []);
 
-  useEffect(() => {
-    if (assetMap.size > 0 && lstDenoms.length > 0) {
-      fetchPools();
-    }
-  }, [assetMap, lstDenoms]);
-
-  useEffect(() => {
-    if (pools.length > 0) {
-      fetchPriceData(pools, timeRange);
-    }
-  }, [timeRange, pools]);
 
   const fetchAssetRegistry = async () => {
     try {
@@ -161,7 +154,7 @@ export default function LSTPoolsPage() {
     }
   };
 
-  const fetchPools = async () => {
+  const fetchPools = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -211,20 +204,15 @@ export default function LSTPoolsPage() {
       });
       
       setPools(filteredPools);
-      
-      // Fetch price data for each pool
-      if (filteredPools.length > 0) {
-        await fetchPriceData(filteredPools, timeRange);
-      }
     } catch (err) {
       console.error('Error fetching pools:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch pools');
     } finally {
       setLoading(false);
     }
-  };
+  }, [assetMap, lstDenoms]);
 
-  const fetchPriceData = async (pools: Pool[], range: string = 'week') => {
+  const fetchPriceData = useCallback(async (pools: Pool[], range: string = 'week') => {
     try {
       setChartLoading(true);
       const pricePromises = pools.map(async (pool) => {
@@ -300,7 +288,7 @@ export default function LSTPoolsPage() {
     } finally {
       setChartLoading(false);
     }
-  };
+  }, [assetMap, lstDenoms]);
 
   const toggleLine = (symbol: string) => {
     const newVisible = new Set(visibleLines);
@@ -328,6 +316,23 @@ export default function LSTPoolsPage() {
     }
     setRefreshing(false);
   };
+
+  // Effects
+  useEffect(() => {
+    fetchAssetRegistry();
+  }, []);
+
+  useEffect(() => {
+    if (assetMap.size > 0 && lstDenoms.length > 0) {
+      fetchPools();
+    }
+  }, [assetMap, lstDenoms, fetchPools]);
+
+  useEffect(() => {
+    if (pools.length > 0) {
+      fetchPriceData(pools, timeRange);
+    }
+  }, [timeRange, pools, fetchPriceData]);
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
