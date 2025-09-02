@@ -37,52 +37,88 @@ export async function GET() {
       pools.map((p) => p.op_bridge_id)
     );
 
-    const monitorData: PoolMonitorData[] = await Promise.all(
-      pools.map(async (pool) => {
-        const bridgeId = pool.op_bridge_id;
-        const metadata = pool.ibc_op_init_metadata;
+    // Process pools in smaller batches to avoid overwhelming the REST API
+    const batchSize = 3;
+    const monitorData: PoolMonitorData[] = [];
 
-        const [virtualPoolBalance, pegKeeperBalance, swapResultsRaw] = await Promise.all([
-          getPoolAmount(metadata),
-          getPegKeeperBalance(metadata),
-          Promise.all(
-            minitswapConfig.offerRatios.map(async (ratio) => {
+    for (let i = 0; i < pools.length; i += batchSize) {
+      const batch = pools.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(pools.length / batchSize)}`);
+      
+      const batchResults = await Promise.all(
+        batch.map(async (pool) => {
+          try {
+            const bridgeId = pool.op_bridge_id;
+            const metadata = pool.ibc_op_init_metadata;
+
+            console.log(`Processing pool ${bridgeId}...`);
+
+            // Get basic pool data first
+            const [virtualPoolBalance, pegKeeperBalance] = await Promise.all([
+              getPoolAmount(metadata),
+              getPegKeeperBalance(metadata),
+            ]);
+
+            // Process swap simulations sequentially to reduce API load
+            const swapResultsRaw = [];
+            for (const ratio of minitswapConfig.offerRatios) {
               const offerAmount = Math.floor(ratio * Number(pool.virtual_pool.pool_size));
               const [returnAmount, fee] = await swapSimulation(
                 metadata,
                 minitswapConfig.initMetadata,
                 offerAmount
               );
-              return { offerAmount, returnAmount, fee };
-            })
-          ),
-        ]);
+              swapResultsRaw.push({ offerAmount, returnAmount, fee });
+            }
 
-        const swaps: SwapResult[] = swapResultsRaw.map((swapRes) => {
-          const initPrice =
-            swapRes.offerAmount !== 0 ? swapRes.returnAmount / swapRes.offerAmount : NaN;
-          return {
-            offerAmount: swapRes.offerAmount / 1e6,
-            returnAmount: swapRes.returnAmount / 1e6,
-            feeAmount: swapRes.fee / 1e6,
-            initPrice: initPrice,
-          };
-        });
+            const swaps: SwapResult[] = swapResultsRaw.map((swapRes) => {
+              const initPrice =
+                swapRes.offerAmount !== 0 ? swapRes.returnAmount / swapRes.offerAmount : NaN;
+              return {
+                offerAmount: swapRes.offerAmount / 1e6,
+                returnAmount: swapRes.returnAmount / 1e6,
+                feeAmount: swapRes.fee / 1e6,
+                initPrice: initPrice,
+              };
+            });
 
-        const chainInfo = chains[bridgeId];
-        const prettyName = chainInfo?.pretty_name ?? `Unknown Chain (${bridgeId})`;
+            const chainInfo = chains[bridgeId];
+            const prettyName = chainInfo?.pretty_name ?? `Unknown Chain (${bridgeId})`;
 
-        return {
-          bridgeId: bridgeId,
-          prettyName: prettyName,
-          virtualPoolBalanceL1: virtualPoolBalance[0] / 1e6,
-          virtualPoolBalanceL2: virtualPoolBalance[1] / 1e6,
-          pegKeeperBalanceL1: -pegKeeperBalance[0] / 1e6, // Note the negation
-          pegKeeperBalanceL2: pegKeeperBalance[1] / 1e6,
-          swaps: swaps,
-        };
-      })
-    );
+            return {
+              bridgeId: bridgeId,
+              prettyName: prettyName,
+              virtualPoolBalanceL1: virtualPoolBalance[0] / 1e6,
+              virtualPoolBalanceL2: virtualPoolBalance[1] / 1e6,
+              pegKeeperBalanceL1: -pegKeeperBalance[0] / 1e6, // Note the negation
+              pegKeeperBalanceL2: pegKeeperBalance[1] / 1e6,
+              swaps: swaps,
+            };
+          } catch (error) {
+            console.error(`Error processing pool ${pool.op_bridge_id}:`, error);
+            // Return a placeholder for failed pools to avoid breaking the entire response
+            const chainInfo = chains[pool.op_bridge_id];
+            const prettyName = chainInfo?.pretty_name ?? `Unknown Chain (${pool.op_bridge_id})`;
+            return {
+              bridgeId: pool.op_bridge_id,
+              prettyName: prettyName,
+              virtualPoolBalanceL1: 0,
+              virtualPoolBalanceL2: 0,
+              pegKeeperBalanceL1: 0,
+              pegKeeperBalanceL2: 0,
+              swaps: [],
+            };
+          }
+        })
+      );
+      
+      monitorData.push(...batchResults);
+      
+      // Small delay between batches to be kind to the API
+      if (i + batchSize < pools.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
 
     // Sort the data alphabetically by prettyName
     monitorData.sort((a, b) => a.prettyName.localeCompare(b.prettyName));
