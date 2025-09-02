@@ -4,6 +4,14 @@ import { getPegKeeperBalance, getPoolAmount, swapSimulation } from '@/lib/minits
 import { PoolListManager } from '@/lib/minitswap-registry';
 import { Chain } from '@initia/initia-registry-types';
 
+// Simple in-memory cache
+interface CacheEntry {
+  data: PoolMonitorData[];
+  timestamp: number;
+}
+
+let cache: CacheEntry | null = null;
+
 // Define a structure for the data returned by the API
 interface PoolMonitorData {
   bridgeId: string;
@@ -24,6 +32,15 @@ interface SwapResult {
 
 export async function GET() {
   try {
+    // Check cache first
+    const now = Date.now();
+    if (cache && (now - cache.timestamp) < minitswapConfig.cacheTTL) {
+      console.log('Serving from cache');
+      return NextResponse.json(cache.data);
+    }
+
+    console.log('Cache miss, fetching fresh data...');
+    
     // Initialize the pool list manager and fetch registry + pools
     const poolListManager = new PoolListManager();
     await poolListManager.update();
@@ -37,9 +54,19 @@ export async function GET() {
       pools.map((p) => p.op_bridge_id)
     );
 
-    // Process pools in smaller batches to avoid overwhelming the REST API
-    const batchSize = 3;
+    // Process pools with optimized batching and timeouts
+    const batchSize = 5; // Increased batch size
     const monitorData: PoolMonitorData[] = [];
+
+    // Helper function to add timeout to promises
+    const withTimeout = <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+        ),
+      ]);
+    };
 
     for (let i = 0; i < pools.length; i += batchSize) {
       const batch = pools.slice(i, i + batchSize);
@@ -53,34 +80,31 @@ export async function GET() {
 
             console.log(`Processing pool ${bridgeId}...`);
 
-            // Get basic pool data first
-            const [virtualPoolBalance, pegKeeperBalance] = await Promise.all([
-              getPoolAmount(metadata),
-              getPegKeeperBalance(metadata),
-            ]);
+            // Get basic pool data with timeout
+            const [virtualPoolBalance, pegKeeperBalance] = await withTimeout(
+              Promise.all([
+                getPoolAmount(metadata),
+                getPegKeeperBalance(metadata),
+              ]),
+              minitswapConfig.apiTimeout
+            );
 
-            // Process swap simulations sequentially to reduce API load
-            const swapResultsRaw = [];
-            for (const ratio of minitswapConfig.offerRatios) {
-              const offerAmount = Math.floor(ratio * Number(pool.virtual_pool.pool_size));
-              const [returnAmount, fee] = await swapSimulation(
-                metadata,
-                minitswapConfig.initMetadata,
-                offerAmount
-              );
-              swapResultsRaw.push({ offerAmount, returnAmount, fee });
-            }
+            // Process only one swap simulation instead of three for speed
+            const ratio = minitswapConfig.offerRatios[0]; // Use only first ratio (0.1)
+            const offerAmount = Math.floor(ratio * Number(pool.virtual_pool.pool_size));
+            
+            const [returnAmount, fee] = await withTimeout(
+              swapSimulation(metadata, minitswapConfig.initMetadata, offerAmount),
+              minitswapConfig.apiTimeout
+            );
 
-            const swaps: SwapResult[] = swapResultsRaw.map((swapRes) => {
-              const initPrice =
-                swapRes.offerAmount !== 0 ? swapRes.returnAmount / swapRes.offerAmount : NaN;
-              return {
-                offerAmount: swapRes.offerAmount / 1e6,
-                returnAmount: swapRes.returnAmount / 1e6,
-                feeAmount: swapRes.fee / 1e6,
-                initPrice: initPrice,
-              };
-            });
+            const initPrice = offerAmount !== 0 ? returnAmount / offerAmount : NaN;
+            const swaps: SwapResult[] = [{
+              offerAmount: offerAmount / 1e6,
+              returnAmount: returnAmount / 1e6,
+              feeAmount: fee / 1e6,
+              initPrice: initPrice,
+            }];
 
             const chainInfo = chains[bridgeId];
             const prettyName = chainInfo?.pretty_name ?? `Unknown Chain (${bridgeId})`;
@@ -113,16 +137,19 @@ export async function GET() {
       );
       
       monitorData.push(...batchResults);
-      
-      // Small delay between batches to be kind to the API
-      if (i + batchSize < pools.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      // Removed artificial delay between batches for speed
     }
 
     // Sort the data alphabetically by prettyName
     monitorData.sort((a, b) => a.prettyName.localeCompare(b.prettyName));
 
+    // Cache the results
+    cache = {
+      data: monitorData,
+      timestamp: Date.now(),
+    };
+
+    console.log(`Fresh data cached, returning ${monitorData.length} pools`);
     return NextResponse.json(monitorData);
   } catch (error) {
     console.error('Error fetching minitswap data:', error);

@@ -8,4 +8,8 @@ export const minitswapConfig = {
     .map((r) => Number(r)),
   registryUri: process.env.NEXT_PUBLIC_REGISTRY_URI || 'https://registry.initia.xyz',
   restUri: process.env.REST_URI || 'https://rest.initia.xyz',
+  // Cache configuration (in milliseconds)
+  cacheTTL: Number(process.env.NEXT_PUBLIC_CACHE_TTL || '300000'), // 5 minutes default
+  // API timeout configuration (in milliseconds)
+  apiTimeout: Number(process.env.NEXT_PUBLIC_API_TIMEOUT || '5000'), // 5 seconds default
 };
