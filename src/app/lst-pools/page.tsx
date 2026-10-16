@@ -418,6 +418,7 @@ export default function LSTPoolsPage() {
                             stroke: 'var(--background)',
                             strokeWidth: 2
                           }}
+                          isAnimationActive={false}
                         />
                       )
                     )                    )}
