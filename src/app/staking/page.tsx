@@ -8,7 +8,6 @@ import { StakeTable } from '@/components/staking/StakeTable';
 import { StakeTrend } from '@/components/staking/StakeTrend';
 import { StatTiles } from '@/components/staking/StatTiles';
 import { UnlockSchedule } from '@/components/staking/UnlockSchedule';
-import { ValidatorPower } from '@/components/staking/ValidatorPower';
 import { fetchJson } from '@/lib/fetch-json';
 import { useFetch } from '@/lib/hooks/useFetch';
 import type { StakingResponse } from '@/lib/staking-types';
@@ -81,7 +80,6 @@ export default function StakingMonitor() {
           <div className="space-y-4 sm:space-y-6">
             <StatTiles data={data} />
             <StakeTable assets={data.assets} />
-            <ValidatorPower validators={data.validators} maxValidators={data.maxValidators} />
             <UnlockSchedule
               schedule={data.unbondingSchedule}
               assets={data.assets}
