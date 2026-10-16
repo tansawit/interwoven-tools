@@ -81,7 +81,7 @@ export default function StakingMonitor() {
             <StatTiles data={data} />
             <StakeTable assets={data.assets} />
             <UnlockSchedule
-              schedule={data.unbondingSchedule}
+              positions={data.unbondingPositions}
               assets={data.assets}
               unbondingDays={data.unbondingDays}
               validatorNames={data.validatorNames}

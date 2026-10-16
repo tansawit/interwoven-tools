@@ -7,7 +7,7 @@ import type {
   HistoryPoint,
   HistoryRange,
   StakingAsset,
-  UnbondingDay,
+  UnbondingPosition,
   ValidatorSummary,
 } from '@/lib/staking-types';
 
@@ -141,12 +141,8 @@ async function getLpPool(denom: string): Promise<LpPool | null> {
 }
 
 /** Unbonding entries of every validator, summed per UTC day of completion. */
-export async function getUnbondingSchedule(validators: Validator[]): Promise<UnbondingDay[]> {
-  const byDate = new Map<string, UnbondingDay>();
-
-  const add = (amounts: Record<string, number>, coin: Coin) => {
-    amounts[coin.denom] = (amounts[coin.denom] ?? 0) + toAmount(coin.amount);
-  };
+export async function getUnbondingPositions(validators: Validator[]): Promise<UnbondingPosition[]> {
+  const positions: UnbondingPosition[] = [];
 
   await mapLimit(validators, 10, async (validator) => {
     let nextKey: string | null | undefined = '';
@@ -158,32 +154,23 @@ export async function getUnbondingSchedule(validators: Validator[]): Promise<Unb
       );
       for (const { delegator_address: address, entries } of page.unbonding_responses) {
         for (const entry of entries) {
-          const date = entry.completion_time.slice(0, 10);
-          let day = byDate.get(date);
-          if (!day) {
-            day = { date, amounts: {}, accounts: [] };
-            byDate.set(date, day);
-          }
-          // One row per delegator per day, even when unbonding from several validators
-          let account = day.accounts.find((a) => a.address === address);
-          if (!account) {
-            account = { address, amounts: {}, validators: [] };
-            day.accounts.push(account);
-          }
-          if (!account.validators.includes(validator.operator_address)) {
-            account.validators.push(validator.operator_address);
-          }
+          const amounts: Record<string, number> = {};
           for (const coin of entry.balance) {
-            add(day.amounts, coin);
-            add(account.amounts, coin);
+            amounts[coin.denom] = (amounts[coin.denom] ?? 0) + toAmount(coin.amount);
           }
+          positions.push({
+            address,
+            validator: validator.operator_address,
+            completionTime: entry.completion_time,
+            amounts,
+          });
         }
       }
       nextKey = page.pagination?.next_key;
     } while (nextKey);
   });
 
-  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return positions.sort((a, b) => a.completionTime.localeCompare(b.completionTime));
 }
 
 export async function getStakingOverview(validators: Validator[]) {

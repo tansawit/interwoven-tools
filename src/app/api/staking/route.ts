@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { cached, cacheHeaders } from '@/lib/server/cache';
-import { getStakingOverview, getUnbondingSchedule, getValidators } from '@/lib/server/staking';
+import { getStakingOverview, getUnbondingPositions, getValidators } from '@/lib/server/staking';
 import type { StakingResponse } from '@/lib/staking-types';
 
 const CACHE_TTL_MS = 30_000;
@@ -9,11 +9,11 @@ const SCHEDULE_TTL_MS = 5 * 60_000;
 
 async function loadStaking(): Promise<StakingResponse> {
   const validators = await cached('staking:validators', CACHE_TTL_MS, getValidators);
-  const [overview, unbondingSchedule] = await Promise.all([
+  const [overview, unbondingPositions] = await Promise.all([
     getStakingOverview(validators),
-    cached('staking:unbonding-schedule', SCHEDULE_TTL_MS, () => getUnbondingSchedule(validators)),
+    cached('staking:unbonding-positions', SCHEDULE_TTL_MS, () => getUnbondingPositions(validators)),
   ]);
-  return { ...overview, unbondingSchedule };
+  return { ...overview, unbondingPositions };
 }
 
 export async function GET() {

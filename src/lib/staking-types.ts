@@ -31,20 +31,14 @@ export interface ValidatorSummary {
   commission: number;
 }
 
-export interface UnbondingAccount {
+export interface UnbondingPosition {
   /** Delegator address */
   address: string;
+  /** Validator operator address the stake is leaving */
+  validator: string;
+  /** ISO time the unbonding completes */
+  completionTime: string;
   amounts: Record<string, number>;
-  /** Operator addresses the delegator is unbonding from that day */
-  validators: string[];
-}
-
-export interface UnbondingDay {
-  /** UTC date, YYYY-MM-DD */
-  date: string;
-  amounts: Record<string, number>;
-  /** Every delegator whose unbonding completes that day */
-  accounts: UnbondingAccount[];
 }
 
 export interface StakingResponse {
@@ -56,7 +50,8 @@ export interface StakingResponse {
   validators: ValidatorSummary[];
   /** Moniker for every validator operator address, active or not */
   validatorNames: Record<string, string>;
-  unbondingSchedule: UnbondingDay[];
+  /** Every unbonding entry across all validators, by completion time */
+  unbondingPositions: UnbondingPosition[];
 }
 
 export type HistoryRange = '30d' | '90d' | '180d';
