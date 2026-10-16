@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Prepares a fresh Amp orb: Bun toolchain + dependencies from bun.lockb.
+# Runs non-interactively and is safe to rerun on a warm snapshot.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+step() {
+  local name="$1"
+  shift
+  echo "==> $name"
+  local start=$SECONDS
+  "$@"
+  echo "<== $name ($((SECONDS - start))s)"
+}
+
+install_bun() {
+  if command -v bun >/dev/null 2>&1; then
+    echo "bun $(bun --version) already installed"
+    return
+  fi
+  curl -fsSL https://bun.sh/install | bash
+  # Make bun visible to later login shells (Amp, supervised services).
+  if ! grep -Fqx 'export PATH="$HOME/.bun/bin:$PATH"' "$HOME/.bash_profile" 2>/dev/null; then
+    echo 'export PATH="$HOME/.bun/bin:$PATH"' >>"$HOME/.bash_profile"
+  fi
+  export PATH="$HOME/.bun/bin:$PATH"
+}
+
+step "bun toolchain" install_bun
+step "bun install" bun install --frozen-lockfile
