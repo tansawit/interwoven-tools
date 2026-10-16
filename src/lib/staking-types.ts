@@ -31,10 +31,20 @@ export interface ValidatorSummary {
   commission: number;
 }
 
+export interface UnbondingAccount {
+  /** Delegator address */
+  address: string;
+  amounts: Record<string, number>;
+  /** Operator addresses the delegator is unbonding from that day */
+  validators: string[];
+}
+
 export interface UnbondingDay {
   /** UTC date, YYYY-MM-DD */
   date: string;
   amounts: Record<string, number>;
+  /** Every delegator whose unbonding completes that day */
+  accounts: UnbondingAccount[];
 }
 
 export interface StakingResponse {

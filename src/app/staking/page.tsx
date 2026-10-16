@@ -84,6 +84,7 @@ export default function StakingMonitor() {
               schedule={data.unbondingSchedule}
               assets={data.assets}
               unbondingDays={data.unbondingDays}
+              validatorNames={data.validatorNames}
             />
             <StakeTrend assets={data.assets} />
             <DelegatorLookup />

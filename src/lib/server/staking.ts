@@ -34,7 +34,10 @@ interface Validator {
 }
 
 interface UnbondingResponse {
-  unbonding_responses: Array<{ entries: Array<{ completion_time: string; balance: Coin[] }> }>;
+  unbonding_responses: Array<{
+    delegator_address: string;
+    entries: Array<{ completion_time: string; balance: Coin[] }>;
+  }>;
   pagination?: { next_key: string | null };
 }
 
@@ -139,7 +142,11 @@ async function getLpPool(denom: string): Promise<LpPool | null> {
 
 /** Unbonding entries of every validator, summed per UTC day of completion. */
 export async function getUnbondingSchedule(validators: Validator[]): Promise<UnbondingDay[]> {
-  const byDate = new Map<string, Record<string, number>>();
+  const byDate = new Map<string, UnbondingDay>();
+
+  const add = (amounts: Record<string, number>, coin: Coin) => {
+    amounts[coin.denom] = (amounts[coin.denom] ?? 0) + toAmount(coin.amount);
+  };
 
   await mapLimit(validators, 10, async (validator) => {
     let nextKey: string | null | undefined = '';
@@ -149,23 +156,34 @@ export async function getUnbondingSchedule(validators: Validator[]): Promise<Unb
       const page: UnbondingResponse = await fetchJson<UnbondingResponse>(
         `${INITIA_REST_URL}/initia/mstaking/v1/validators/${validator.operator_address}/unbonding_delegations?${params}`
       );
-      for (const { entries } of page.unbonding_responses) {
+      for (const { delegator_address: address, entries } of page.unbonding_responses) {
         for (const entry of entries) {
           const date = entry.completion_time.slice(0, 10);
-          const amounts = byDate.get(date) ?? {};
-          for (const coin of entry.balance) {
-            amounts[coin.denom] = (amounts[coin.denom] ?? 0) + toAmount(coin.amount);
+          let day = byDate.get(date);
+          if (!day) {
+            day = { date, amounts: {}, accounts: [] };
+            byDate.set(date, day);
           }
-          byDate.set(date, amounts);
+          // One row per delegator per day, even when unbonding from several validators
+          let account = day.accounts.find((a) => a.address === address);
+          if (!account) {
+            account = { address, amounts: {}, validators: [] };
+            day.accounts.push(account);
+          }
+          if (!account.validators.includes(validator.operator_address)) {
+            account.validators.push(validator.operator_address);
+          }
+          for (const coin of entry.balance) {
+            add(day.amounts, coin);
+            add(account.amounts, coin);
+          }
         }
       }
       nextKey = page.pagination?.next_key;
     } while (nextKey);
   });
 
-  return [...byDate]
-    .map(([date, amounts]) => ({ date, amounts }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function getStakingOverview(validators: Validator[]) {
