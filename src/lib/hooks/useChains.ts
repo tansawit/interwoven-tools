@@ -1,87 +1,65 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { Chain, getChains } from '@/lib/registry';
 
-export interface Chain {
-  chain_name: string;
-  pretty_name: string;
-  chain_id: string;
-  network_type: string;
-  apis?: {
-    rest?: Array<{ address: string }>;
-    rpc?: Array<{ address: string }>;
-    'json-rpc'?: Array<{ address: string }>;
-  };
-  metadata?: {
-    op_bridge_id?: string;
-    minitia?: {
-      type: string;
-      version: string;
-    };
-  };
-  logo_URIs?: {
-    png?: string;
-  };
-}
+export type { Chain };
 
 interface UseChainsOptions {
-  /** Filter function to apply to chains */
+  /** Filter function to apply to chains. Must be stable (e.g. defined at module scope). */
   filter?: (chain: Chain) => boolean;
   /** Whether to auto-select the first chain */
   autoSelect?: boolean;
 }
 
-export function useChains(options: UseChainsOptions = {}) {
-  const [chains, setChains] = useState<Chain[]>([]);
-  const [selectedChain, setSelectedChain] = useState<string>('');
+export const hasRestEndpoint = (chain: Chain) =>
+  !!chain.apis?.rest && chain.apis.rest.length > 0;
+
+// The registry rarely changes, so share one request across every page and component.
+let chainsRequest: Promise<Chain[]> | null = null;
+
+function loadChains(): Promise<Chain[]> {
+  chainsRequest ??= getChains().catch((error) => {
+    chainsRequest = null; // allow retrying after a failure
+    throw error;
+  });
+  return chainsRequest;
+}
+
+export function useChains({ filter = hasRestEndpoint, autoSelect = true }: UseChainsOptions = {}) {
+  const [allChains, setAllChains] = useState<Chain[]>([]);
+  const [userSelectedChain, setSelectedChain] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { filter, autoSelect = true } = options;
-
-  const fetchChains = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      console.log('Fetching chains from registry...');
-      const response = await fetch('https://registry.initia.xyz/chains.json');
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result: Chain[] = await response.json();
-      console.log('Chains received:', result);
-
-      // Apply custom filter if provided, otherwise default to chains with REST endpoints
-      const filteredChains = result.filter(
-        filter || ((chain) => chain.apis?.rest && chain.apis.rest.length > 0)
-      );
-
-      setChains(filteredChains);
-
-      // Auto-select first chain if enabled and no chain is selected
-      if (autoSelect && filteredChains.length > 0 && !selectedChain) {
-        setSelectedChain(filteredChains[0].chain_name);
-      }
-    } catch (e: unknown) {
-      console.error('Failed to fetch chains:', e);
-      const errorMessage = e instanceof Error ? e.message : 'Failed to fetch chains from registry';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [filter, autoSelect, selectedChain]);
-
-  const getSelectedChain = () =>
-    chains.find((chain) => chain.chain_name === selectedChain) || chains[0];
-
-  const refreshChains = () => {
-    fetchChains();
-  };
-
   useEffect(() => {
-    fetchChains();
-  }, [fetchChains]);
+    let cancelled = false;
+
+    loadChains()
+      .then((result) => {
+        if (!cancelled) setAllChains(result);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        console.error('Failed to fetch chains:', e);
+        setError(e instanceof Error ? e.message : 'Failed to fetch chains from registry');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const chains = useMemo(() => allChains.filter(filter), [allChains, filter]);
+
+  const selectedChain =
+    userSelectedChain || (autoSelect && chains.length > 0 ? chains[0].chain_name : '');
+
+  const selectedChainData = useMemo(
+    () => chains.find((chain) => chain.chain_name === selectedChain) || chains[0],
+    [chains, selectedChain]
+  );
 
   return {
     chains,
@@ -89,7 +67,6 @@ export function useChains(options: UseChainsOptions = {}) {
     setSelectedChain,
     loading,
     error,
-    getSelectedChain,
-    refreshChains,
+    selectedChainData,
   };
 }

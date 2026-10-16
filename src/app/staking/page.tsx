@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Activity } from 'lucide-react';
+import { fetchJson } from '@/lib/fetch-json';
+import { useFetch } from '@/lib/hooks/useFetch';
 
 // Define the types for the staking pool data
 interface TokenAmount {
@@ -59,48 +61,33 @@ const config = {
   interval: 60000, // 1 minute refresh interval
 };
 
+const NO_PRICES: PriceData = {};
+const NO_POOL_COMPOSITIONS: { [denom: string]: PoolComposition } = {};
+
+const loadStakingData = () => fetchJson<ApiResponse>('/api/staking', { timeoutMs: 30_000 });
+
 export default function StakingMonitor() {
-  const [data, setData] = useState<StakingData | null>(null);
-  const [prices, setPrices] = useState<PriceData>({});
-  const [poolCompositions, setPoolCompositions] = useState<{ [denom: string]: PoolComposition }>(
-    {}
+  const {
+    data: result,
+    loading,
+    error,
+    lastUpdated,
+    refresh: fetchData,
+  } = useFetch(loadStakingData, { refreshInterval: config.interval });
+  const data = result?.stakingData ?? null;
+  const prices = result?.prices ?? NO_PRICES;
+  const poolCompositions = result?.poolCompositions ?? NO_POOL_COMPOSITIONS;
+
+  // Always show INIT (uinit) first
+  const sortedBondedTokens = useMemo(
+    () =>
+      [...(data?.pool.bonded_tokens ?? [])].sort((a, b) => {
+        if (a.denom === 'uinit') return -1;
+        if (b.denom === 'uinit') return 1;
+        return 0;
+      }),
+    [data]
   );
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      console.log('Fetching staking data and prices...');
-      const response = await fetch('/api/staking');
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result: ApiResponse = await response.json();
-      console.log('API response received:', result);
-
-      setData(result.stakingData);
-      setPrices(result.prices);
-      setPoolCompositions(result.poolCompositions || {});
-      setLastUpdated(new Date());
-    } catch (e: unknown) {
-      console.error('Failed to fetch staking data:', e);
-      const errorMessage = e instanceof Error ? e.message : 'Failed to fetch staking data';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-    const intervalId = setInterval(fetchData, config.interval);
-    return () => clearInterval(intervalId);
-  }, []);
 
   const formatLargeNumber = (value: number) => {
     if (value >= 1e9) {
@@ -254,13 +241,7 @@ export default function StakingMonitor() {
           <div className="space-y-4 sm:space-y-6">
             {/* Mobile Cards View */}
             <div className="block lg:hidden space-y-3 sm:space-y-4">
-              {data.pool.bonded_tokens
-                .sort((a, b) => {
-                  // Always show INIT (uinit) first
-                  if (a.denom === 'uinit') return -1;
-                  if (b.denom === 'uinit') return 1;
-                  return 0;
-                })
+              {sortedBondedTokens
                 .map((bondedToken) => {
                   const notBondedToken = data.pool.not_bonded_tokens.find(
                     (t) => t.denom === bondedToken.denom
@@ -353,13 +334,7 @@ export default function StakingMonitor() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.pool.bonded_tokens
-                    .sort((a, b) => {
-                      // Always show INIT (uinit) first
-                      if (a.denom === 'uinit') return -1;
-                      if (b.denom === 'uinit') return 1;
-                      return 0;
-                    })
+                  {sortedBondedTokens
                     .map((bondedToken, index) => {
                       const notBondedToken = data.pool.not_bonded_tokens.find(
                         (t) => t.denom === bondedToken.denom

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import {
 import { diffWords } from 'diff';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Image from 'next/image';
+import { Chain, getAssetList, getChains, TESTNET_REGISTRY_URL } from '@/lib/registry';
 
 interface Asset {
   description: string;
@@ -34,14 +35,6 @@ interface Asset {
   };
   coingecko_id: string;
   keywords: string[];
-}
-
-interface Chain {
-  chain_name: string;
-  pretty_name: string;
-  logo_URIs: {
-    png: string;
-  };
 }
 
 interface AssetList {
@@ -86,9 +79,7 @@ export default function AssetRegistryPage() {
   useEffect(() => {
     const fetchChains = async () => {
       try {
-        const response = await fetch('https://registry.testnet.initia.xyz/chains.json');
-        const data = await response.json();
-        setChains(data);
+        setChains(await getChains(TESTNET_REGISTRY_URL));
       } catch (error) {
         console.error('Error fetching chains:', error);
       }
@@ -100,11 +91,8 @@ export default function AssetRegistryPage() {
     const fetchAssetList = async () => {
       if (!selectedChain) return;
       try {
-        const response = await fetch(
-          `https://registry.testnet.initia.xyz/chains/${selectedChain}/assetlist.json`
-        );
-        const data = await response.json();
-        setCurrentAssetList(data);
+        const data = await getAssetList(selectedChain, TESTNET_REGISTRY_URL);
+        setCurrentAssetList(data as unknown as AssetList);
         setFormData((prev) => ({ ...prev, chain_name: selectedChain }));
       } catch (error) {
         console.error('Error fetching asset list:', error);
@@ -117,7 +105,8 @@ export default function AssetRegistryPage() {
     setSelectedChain(chainName);
   };
 
-  const generateDiff = () => {
+  // Word-diffing the whole asset list is expensive, so only recompute when its inputs change.
+  const diffParts = useMemo(() => {
     if (!currentAssetList || !formData.asset) return null;
 
     const currentJson = JSON.stringify(currentAssetList, null, 2);
@@ -128,7 +117,7 @@ export default function AssetRegistryPage() {
     const newJson = JSON.stringify(newAssetList, null, 2);
 
     return diffWords(currentJson, newJson) as DiffPart[];
-  };
+  }, [currentAssetList, formData.asset]);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -500,7 +489,7 @@ export default function AssetRegistryPage() {
                   >
                     <pre className="text-xs overflow-x-auto">
                       {currentAssetList &&
-                        generateDiff()?.map((part: DiffPart, index: number) => (
+                        diffParts?.map((part: DiffPart, index: number) => (
                           <span
                             key={index}
                             className={

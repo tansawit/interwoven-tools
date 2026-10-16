@@ -1,18 +1,130 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-// Select components no longer needed
 import { Calculator, Activity, RefreshCw } from 'lucide-react';
-import { useChains } from '@/lib/hooks/useChains';
+import { Chain, useChains } from '@/lib/hooks/useChains';
 import { ChainSelector } from '@/components/ChainSelector';
+import { fetchJson } from '@/lib/fetch-json';
 
 interface BlockInfo {
   height: number;
   timestamp: string;
-  hash: string;
+}
+
+interface RestBlockResponse {
+  block: { header: { height: string; time: string } };
+}
+
+interface RpcBlockchainResponse {
+  result: {
+    last_height: string;
+    block_metas: Array<{ header: { height: string; time: string } }>;
+  };
+}
+
+const SAMPLE_SIZE = 100;
+// CometBFT's /blockchain endpoint returns at most 20 headers per request.
+const RPC_PAGE_SIZE = 20;
+
+/**
+ * Fetches the headers of the latest SAMPLE_SIZE blocks (ascending by height).
+ * Uses the lightweight RPC /blockchain endpoint (5 requests for headers only) and
+ * falls back to one REST request per block (which includes every transaction).
+ */
+async function fetchRecentBlocks(chain: Chain): Promise<BlockInfo[]> {
+  const rpcEndpoint = chain.apis?.rpc?.[0]?.address;
+  if (rpcEndpoint) {
+    try {
+      return await fetchRecentBlocksFromRpc(rpcEndpoint);
+    } catch (e) {
+      console.warn('RPC block fetch failed, falling back to REST:', e);
+    }
+  }
+
+  const restEndpoint = chain.apis?.rest?.[0]?.address;
+  if (!restEndpoint) {
+    throw new Error('No REST endpoint found for selected chain');
+  }
+  return fetchRecentBlocksFromRest(restEndpoint);
+}
+
+async function fetchRecentBlocksFromRpc(rpcEndpoint: string): Promise<BlockInfo[]> {
+  const toBlockInfo = (meta: { header: { height: string; time: string } }): BlockInfo => ({
+    height: parseInt(meta.header.height),
+    timestamp: meta.header.time,
+  });
+
+  const latest = await fetchJson<RpcBlockchainResponse>(`${rpcEndpoint}/blockchain`);
+  if (latest.result.block_metas.length === 0) {
+    throw new Error('RPC returned no blocks');
+  }
+  const latestHeight = parseInt(latest.result.last_height);
+  const startHeight = Math.max(1, latestHeight - (SAMPLE_SIZE - 1));
+
+  const pages: Promise<RpcBlockchainResponse>[] = [];
+  const firstFetchedHeight = Math.min(
+    ...latest.result.block_metas.map((meta) => parseInt(meta.header.height))
+  );
+  for (let max = firstFetchedHeight - 1; max >= startHeight; max -= RPC_PAGE_SIZE) {
+    const min = Math.max(startHeight, max - RPC_PAGE_SIZE + 1);
+    pages.push(
+      fetchJson<RpcBlockchainResponse>(`${rpcEndpoint}/blockchain?minHeight=${min}&maxHeight=${max}`)
+    );
+  }
+
+  const metas = [latest, ...(await Promise.all(pages))].flatMap((page) => page.result.block_metas);
+  return metas
+    .map(toBlockInfo)
+    .filter((block) => block.height >= startHeight)
+    .sort((a, b) => a.height - b.height);
+}
+
+async function fetchRecentBlocksFromRest(restEndpoint: string): Promise<BlockInfo[]> {
+  const blockUrl = (height: number | 'latest') =>
+    `${restEndpoint}/cosmos/base/tendermint/v1beta1/blocks/${height}`;
+  const toBlockInfo = (data: RestBlockResponse): BlockInfo => ({
+    height: parseInt(data.block.header.height),
+    timestamp: data.block.header.time,
+  });
+
+  const latest = toBlockInfo(await fetchJson<RestBlockResponse>(blockUrl('latest')));
+  const startHeight = Math.max(1, latest.height - (SAMPLE_SIZE - 1));
+
+  const blocks = await Promise.all(
+    Array.from({ length: latest.height - startHeight }, (_, i) =>
+      fetchJson<RestBlockResponse>(blockUrl(startHeight + i))
+        .then(toBlockInfo)
+        .catch(() => null)
+    )
+  );
+  return [...blocks.filter((block): block is BlockInfo => block !== null), latest];
+}
+
+/** Median of the time between consecutive blocks, in seconds. */
+function calculateMedianBlockTime(blocks: BlockInfo[]): number | null {
+  if (blocks.length < 2) return null;
+
+  const timeDifferences: number[] = [];
+  for (let i = 1; i < blocks.length; i++) {
+    const prevTime = new Date(blocks[i - 1].timestamp).getTime();
+    const currTime = new Date(blocks[i].timestamp).getTime();
+    const diffSeconds = (currTime - prevTime) / 1000;
+    if (diffSeconds > 0 && diffSeconds < 60) {
+      // Filter out unrealistic times
+      timeDifferences.push(diffSeconds);
+    }
+  }
+
+  if (timeDifferences.length === 0) return null;
+
+  timeDifferences.sort((a, b) => a - b);
+  const medianIndex = Math.floor(timeDifferences.length / 2);
+  return timeDifferences.length % 2 === 0
+    ? (timeDifferences[medianIndex - 1] + timeDifferences[medianIndex]) / 2
+    : timeDifferences[medianIndex];
 }
 
 export default function BlockTimeCalculator() {
@@ -23,11 +135,8 @@ export default function BlockTimeCalculator() {
     setSelectedChain,
     loading: chainsLoading,
     error: chainsError,
-    getSelectedChain,
-  } = useChains({
-    filter: (chain) => !!(chain.apis?.rest && chain.apis.rest.length > 0),
-    autoSelect: true,
-  });
+    selectedChainData,
+  } = useChains();
 
   const [currentBlock, setCurrentBlock] = useState<BlockInfo | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -52,115 +161,36 @@ export default function BlockTimeCalculator() {
   // Combine chain and block errors
   const combinedError = chainsError || error;
 
-  const calculateMedianBlockTime = async (restEndpoint: string): Promise<number | null> => {
-    try {
-      console.log('Calculating median block time...');
+  // Ignore responses from a previously selected chain.
+  const latestRequest = useRef(0);
 
-      // Get the latest block height first
-      const statusResponse = await fetch(
-        `${restEndpoint}/cosmos/base/tendermint/v1beta1/blocks/latest`
-      );
-      if (!statusResponse.ok) {
-        throw new Error('Failed to fetch latest block');
-      }
-
-      const statusData = await statusResponse.json();
-      const latestHeight = parseInt(statusData.block.header.height);
-
-      // Fetch blocks from latest-100 to latest
-      const blockPromises = [];
-      const startHeight = Math.max(1, latestHeight - 99); // Get last 100 blocks
-
-      for (let i = startHeight; i <= latestHeight; i++) {
-        blockPromises.push(
-          fetch(`${restEndpoint}/cosmos/base/tendermint/v1beta1/blocks/${i}`)
-            .then((res) => (res.ok ? res.json() : null))
-            .catch(() => null)
-        );
-      }
-
-      const blockResults = await Promise.all(blockPromises);
-      const validBlocks = blockResults.filter((block) => block !== null);
-
-      if (validBlocks.length < 2) {
-        throw new Error('Not enough blocks to calculate block time');
-      }
-
-      // Calculate time differences between consecutive blocks
-      const timeDifferences: number[] = [];
-      for (let i = 1; i < validBlocks.length; i++) {
-        const prevTime = new Date(validBlocks[i - 1].block.header.time).getTime();
-        const currTime = new Date(validBlocks[i].block.header.time).getTime();
-        const diffSeconds = (currTime - prevTime) / 1000;
-        if (diffSeconds > 0 && diffSeconds < 60) {
-          // Filter out unrealistic times
-          timeDifferences.push(diffSeconds);
-        }
-      }
-
-      if (timeDifferences.length === 0) {
-        throw new Error('No valid block time differences found');
-      }
-
-      // Calculate median
-      timeDifferences.sort((a, b) => a - b);
-      const medianIndex = Math.floor(timeDifferences.length / 2);
-      const median =
-        timeDifferences.length % 2 === 0
-          ? (timeDifferences[medianIndex - 1] + timeDifferences[medianIndex]) / 2
-          : timeDifferences[medianIndex];
-
-      console.log(
-        `Calculated median block time: ${median.toFixed(2)}s from ${timeDifferences.length} samples`
-      );
-      return median;
-    } catch (e: unknown) {
-      console.error('Failed to calculate block time:', e);
-      return null;
-    }
-  };
-
-  const fetchCurrentBlock = useCallback(async () => {
+  const fetchCurrentBlock = useCallback(async (chain: Chain | undefined) => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     setError(null);
 
     try {
-      const chain = getSelectedChain();
-      if (!chain?.apis?.rest?.[0]?.address) {
+      if (!chain) {
         throw new Error('No REST endpoint found for selected chain');
       }
 
-      const restEndpoint = chain.apis.rest[0].address;
-
-      // Fetch latest block info
-      const response = await fetch(`${restEndpoint}/cosmos/base/tendermint/v1beta1/blocks/latest`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const blocks = await fetchRecentBlocks(chain);
+      if (requestId !== latestRequest.current) return;
+      if (blocks.length === 0) {
+        throw new Error('Failed to fetch latest block');
       }
 
-      const data = await response.json();
-      const blockHeight = parseInt(data.block.header.height);
-      const blockTime = data.block.header.time;
-      const blockHash = data.block_id.hash;
-
-      setCurrentBlock({
-        height: blockHeight,
-        timestamp: blockTime,
-        hash: blockHash,
-      });
-
-      // Calculate median block time
-      const medianTime = await calculateMedianBlockTime(restEndpoint);
-      setCalculatedBlockTime(medianTime);
+      setCurrentBlock(blocks[blocks.length - 1]);
+      setCalculatedBlockTime(calculateMedianBlockTime(blocks));
     } catch (e: unknown) {
+      if (requestId !== latestRequest.current) return;
       console.error('Failed to fetch current block:', e);
       const errorMessage = e instanceof Error ? e.message : 'Failed to fetch current block';
       setError(errorMessage);
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
-  }, [getSelectedChain]);
+  }, []);
 
   const calculateBlockDifference = () => {
     const from = parseInt(fromBlock);
@@ -302,10 +332,12 @@ export default function BlockTimeCalculator() {
   };
 
   useEffect(() => {
-    if (selectedChain) {
-      fetchCurrentBlock();
+    if (selectedChainData) {
+      // Show the loading state immediately when the selected chain changes.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      fetchCurrentBlock(selectedChainData);
     }
-  }, [selectedChain, fetchCurrentBlock]);
+  }, [selectedChainData, fetchCurrentBlock]);
 
   return (
     <div className="container mx-auto py-6 sm:py-8 px-4 max-w-5xl">
@@ -342,7 +374,7 @@ export default function BlockTimeCalculator() {
               </div>
               <div className="flex gap-4">
                 <Button
-                  onClick={fetchCurrentBlock}
+                  onClick={() => fetchCurrentBlock(selectedChainData)}
                   disabled={loading}
                   variant="rectangular"
                   className="flex-1 h-12 text-base sm:text-sm sm:h-10"

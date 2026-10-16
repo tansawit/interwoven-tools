@@ -16,12 +16,6 @@ const tools: Tool[] = [
     path: '/address-converter',
   },
   {
-    id: 'minitswap',
-    title: 'Minitswap',
-    description: 'Monitoring of Minitswap pools, balances, and swap prices',
-    path: '/minitswap',
-  },
-  {
     id: 'staking',
     title: 'Staking',
     description: 'Monitoring of INIT and EL pools',

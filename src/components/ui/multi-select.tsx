@@ -44,11 +44,9 @@ export function MultiSelect({
   const [searchValue, setSearchValue] = React.useState("")
 
   const handleSelect = React.useCallback((value: string) => {
-    console.log("handleSelect called with:", value)
     const newSelected = selected.includes(value)
       ? selected.filter((item) => item !== value)
       : [...selected, value]
-    console.log("New selected:", newSelected)
     onChange(newSelected)
   }, [selected, onChange])
 
@@ -142,7 +140,6 @@ export function MultiSelect({
                     isSelected && "bg-gray-900"
                   )}
                   onClick={() => {
-                    console.log("Item clicked:", option.value)
                     handleSelect(option.value)
                   }}
                 >

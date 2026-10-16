@@ -1,265 +1,173 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchJson } from '@/lib/fetch-json';
+import {
+  Chain,
+  getAssetList,
+  getChains,
+  REGISTRY_URL,
+  RegistryAsset,
+  TESTNET_REGISTRY_URL,
+} from '@/lib/registry';
+import { cached, cacheHeaders } from '@/lib/server/cache';
 
-interface Chain {
+interface SupplyResponse {
+  supply: Array<{ denom: string; amount: string }>;
+  pagination?: { next_key: string | null };
+}
+
+interface ChainAssetSupplies {
   chain_name: string;
   pretty_name: string;
-  apis?: {
-    rest?: Array<{ address: string }>;
+  assets: RegistryAsset[];
+  supplies: Record<string, string>;
+}
+
+const CACHE_TTL_MS = 60_000;
+const INIT_WRAPPED_SYMBOL = /^INIT\.[a-zA-Z0-9]+$/;
+
+/** Fetches every page of the chain's total supply (pages are capped at 100 entries by default). */
+async function fetchSupplies(restEndpoint: string): Promise<Record<string, string>> {
+  const supplies: Record<string, string> = {};
+  let nextKey: string | null | undefined = '';
+
+  do {
+    const params = new URLSearchParams({ 'pagination.limit': '1000' });
+    if (nextKey) params.set('pagination.key', nextKey);
+    const page: SupplyResponse = await fetchJson<SupplyResponse>(
+      `${restEndpoint}/cosmos/bank/v1beta1/supply?${params}`
+    );
+    for (const { denom, amount } of page.supply) supplies[denom] = amount;
+    nextKey = page.pagination?.next_key;
+  } while (nextKey);
+
+  return supplies;
+}
+
+async function loadChainAssetSupplies(
+  chain: Chain,
+  registryUrl: string
+): Promise<ChainAssetSupplies> {
+  const restEndpoint = chain.apis?.rest?.[0]?.address;
+  const [assetList, supplies] = await Promise.allSettled([
+    getAssetList(chain.chain_name, registryUrl),
+    restEndpoint ? fetchSupplies(restEndpoint) : Promise.resolve({}),
+  ]);
+
+  if (assetList.status === 'rejected') {
+    console.error(`No asset list found for ${chain.chain_name}:`, assetList.reason);
+  }
+  if (supplies.status === 'rejected') {
+    console.error(`Failed to fetch supply for ${chain.chain_name}:`, supplies.reason);
+  }
+
+  return {
+    chain_name: chain.chain_name,
+    pretty_name: chain.pretty_name,
+    assets: assetList.status === 'fulfilled' ? assetList.value.assets : [],
+    supplies: supplies.status === 'fulfilled' ? supplies.value : {},
   };
 }
 
-interface Asset {
-  base: string;
-  display: string;
-  symbol: string;
-  denom_units: {
-    denom: string;
-    exponent: number;
-  }[];
-  traces?: {
-    type: string;
-    counterparty?: {
-      chain_name: string;
-      base_denom: string;
-      channel_id?: string;
+/** Converts a base-denom amount to whole display units (truncating). */
+function toDisplayAmount(asset: RegistryAsset, amount: string): bigint {
+  const exponent = asset.denom_units.find((unit) => unit.denom === asset.display)?.exponent || 0;
+  return BigInt(amount) / BigInt(10) ** BigInt(exponent);
+}
+
+async function loadAssetDistribution(registryUrl: string) {
+  const chains = await getChains(registryUrl);
+  const chainAssetSupplies = await Promise.all(
+    chains
+      .filter((chain) => chain.apis?.rest && chain.apis.rest.length > 0)
+      .map((chain) => loadChainAssetSupplies(chain, registryUrl))
+  );
+
+  // Collect all unique symbols across all chains, skipping INIT.{xxx} format assets
+  const allSymbols = new Set<string>();
+  for (const chainData of chainAssetSupplies) {
+    for (const asset of chainData.assets) {
+      if (!INIT_WRAPPED_SYMBOL.test(asset.symbol)) allSymbols.add(asset.symbol);
+    }
+  }
+
+  // Total amount bridged out of each source chain. Key: "sourceChain:symbol"
+  const bridgedAmounts = new Map<string, bigint>();
+  for (const chainData of chainAssetSupplies) {
+    for (const asset of chainData.assets) {
+      const sourceChain = asset.traces?.[0]?.counterparty?.chain_name;
+      if (!sourceChain || INIT_WRAPPED_SYMBOL.test(asset.symbol)) continue;
+
+      const supplyAmount = chainData.supplies[asset.base];
+      if (supplyAmount && supplyAmount !== '0') {
+        const key = `${sourceChain}:${asset.symbol}`;
+        bridgedAmounts.set(
+          key,
+          (bridgedAmounts.get(key) ?? BigInt(0)) + toDisplayAmount(asset, supplyAmount)
+        );
+      }
+    }
+  }
+
+  // Build one row per chain; source chains exclude the amount bridged elsewhere
+  const tableData = chainAssetSupplies.map((chainData) => {
+    const row: Record<string, string | null> = {
+      chain_name: chainData.chain_name,
+      pretty_name: chainData.pretty_name,
     };
-    chain?: {
-      channel_id?: string;
-      path?: string;
-      bridge_id?: string;
-    };
-  }[];
-}
+    const assetsBySymbol = new Map<string, RegistryAsset>();
+    for (const asset of chainData.assets) {
+      if (!assetsBySymbol.has(asset.symbol)) assetsBySymbol.set(asset.symbol, asset);
+    }
 
-interface AssetList {
-  chain_name: string;
-  assets: Asset[];
-}
+    for (const symbol of allSymbols) {
+      const asset = assetsBySymbol.get(symbol);
+      if (!asset) {
+        row[symbol] = null; // This chain doesn't have this asset
+        continue;
+      }
 
-interface Supply {
-  denom: string;
-  amount: string;
-}
+      const supplyAmount = chainData.supplies[asset.base];
+      if (!supplyAmount) {
+        row[symbol] = '0';
+        continue;
+      }
 
-interface SupplyResponse {
-  supply: Supply[];
+      const bridgedAmount = bridgedAmounts.get(`${chainData.chain_name}:${symbol}`) ?? BigInt(0);
+      const displayAmount = toDisplayAmount(asset, supplyAmount) - bridgedAmount;
+      row[symbol] = (displayAmount < BigInt(0) ? BigInt(0) : displayAmount).toString();
+    }
+
+    return row;
+  });
+
+  // Calculate totals for each symbol
+  const totalRow: Record<string, string | null> = {
+    chain_name: 'total',
+    pretty_name: 'Total',
+  };
+  for (const symbol of allSymbols) {
+    totalRow[symbol] = tableData
+      .reduce((total, row) => total + BigInt(row[symbol] ?? 0), BigInt(0))
+      .toString();
+  }
+  tableData.push(totalRow);
+
+  return {
+    symbols: Array.from(allSymbols).sort(),
+    data: tableData,
+  };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const isTestnet = searchParams.get('testnet') === 'true';
-    const registryBase = isTestnet 
-      ? 'https://registry.testnet.initia.xyz' 
-      : 'https://registry.initia.xyz';
-
-    // Fetch all chains
-    const chainsResponse = await fetch(`${registryBase}/chains.json`);
-    if (!chainsResponse.ok) {
-      throw new Error('Failed to fetch chains');
-    }
-    const chains: Chain[] = await chainsResponse.json();
-
-    // Filter chains that have REST endpoints
-    const validChains = chains.filter(chain => chain.apis?.rest && chain.apis.rest.length > 0);
-
-    // Fetch assets for each chain and their supplies
-    const chainAssetSupplies = await Promise.all(
-      validChains.map(async (chain) => {
-        try {
-          // Fetch asset list for this chain
-          const assetListResponse = await fetch(`${registryBase}/chains/${chain.chain_name}/assetlist.json`);
-          if (!assetListResponse.ok) {
-            console.log(`No asset list found for ${chain.chain_name}`);
-            return {
-              chain_name: chain.chain_name,
-              pretty_name: chain.pretty_name,
-              assets: [],
-              supplies: {}
-            };
-          }
-          
-          const assetList: AssetList = await assetListResponse.json();
-          
-          // Get REST endpoint for this chain
-          const restEndpoint = chain.apis?.rest?.[0]?.address;
-          if (!restEndpoint) {
-            console.log(`No REST endpoint for ${chain.chain_name}`);
-            return {
-              chain_name: chain.chain_name,
-              pretty_name: chain.pretty_name,
-              assets: assetList.assets,
-              supplies: {}
-            };
-          }
-
-          // Fetch supplies from the chain
-          const supplyResponse = await fetch(`${restEndpoint}/cosmos/bank/v1beta1/supply`);
-          if (!supplyResponse.ok) {
-            console.log(`Failed to fetch supply for ${chain.chain_name}`);
-            return {
-              chain_name: chain.chain_name,
-              pretty_name: chain.pretty_name,
-              assets: assetList.assets,
-              supplies: {}
-            };
-          }
-
-          const supplyData: SupplyResponse = await supplyResponse.json();
-          
-          // Create a map of supplies by denom
-          const supplyMap: Record<string, string> = {};
-          supplyData.supply.forEach(supply => {
-            supplyMap[supply.denom] = supply.amount;
-          });
-
-          return {
-            chain_name: chain.chain_name,
-            pretty_name: chain.pretty_name,
-            assets: assetList.assets,
-            supplies: supplyMap
-          };
-        } catch (error) {
-          console.error(`Error processing chain ${chain.chain_name}:`, error);
-          return {
-            chain_name: chain.chain_name,
-            pretty_name: chain.pretty_name,
-            assets: [],
-            supplies: {}
-          };
-        }
-      })
+    const isTestnet = request.nextUrl.searchParams.get('testnet') === 'true';
+    const registryUrl = isTestnet ? TESTNET_REGISTRY_URL : REGISTRY_URL;
+    const data = await cached(`assets-distribution:${registryUrl}`, CACHE_TTL_MS, () =>
+      loadAssetDistribution(registryUrl)
     );
-
-    // Process the data to create the table structure
-    // Collect all unique symbols across all chains
-    const allSymbols = new Set<string>();
-    chainAssetSupplies.forEach(chainData => {
-      chainData.assets.forEach((asset: Asset) => {
-        // Skip INIT.{xxx} format assets
-        if (!asset.symbol.match(/^INIT\.[a-zA-Z0-9]+$/)) {
-          allSymbols.add(asset.symbol);
-        } else {
-          console.log(`Excluding INIT token from allSymbols: ${asset.symbol}`);
-        }
-      });
-    });
-
-    // Create a map to track bridged amounts
-    // Key: "sourceChain:symbol", Value: total bridged amount
-    const bridgedAmounts = new Map<string, bigint>();
-    
-    // First pass: identify all bridged assets and their amounts
-    chainAssetSupplies.forEach(chainData => {
-      chainData.assets.forEach((asset: Asset) => {
-        if (asset.traces && asset.traces.length > 0 && !asset.symbol.match(/^INIT\.[a-zA-Z0-9]+$/)) {
-          // This is a bridged asset
-          const trace = asset.traces[0]; // Use the first trace
-          if (trace.counterparty?.chain_name) {
-            const sourceChain = trace.counterparty.chain_name;
-            const symbol = asset.symbol;
-            
-            // Get the supply amount for this asset on the destination chain
-            const supplyAmount = chainData.supplies[asset.base];
-            if (supplyAmount && supplyAmount !== '0') {
-              // Find the display denom unit to get the exponent
-              const displayUnit = asset.denom_units.find(unit => unit.denom === asset.display);
-              const exponent = displayUnit?.exponent || 0;
-              
-              // Convert to display amount
-              const displayAmount = BigInt(supplyAmount) / BigInt(10 ** exponent);
-              
-              // Add to bridged amounts
-              const key = `${sourceChain}:${symbol}`;
-              const currentAmount = bridgedAmounts.get(key) || BigInt(0);
-              bridgedAmounts.set(key, currentAmount + displayAmount);
-              
-              console.log(`Found bridged asset: ${symbol} on ${chainData.chain_name} from ${sourceChain}, amount: ${displayAmount}`);
-            }
-          }
-        }
-      });
-    });
-
-    // Build the table data
-    const tableData = chainAssetSupplies.map(chainData => {
-      const row: Record<string, string | null> = {
-        chain_name: chainData.chain_name,
-        pretty_name: chainData.pretty_name,
-      };
-
-      // For each symbol, find the corresponding asset and supply
-      allSymbols.forEach(symbol => {
-        const asset = chainData.assets.find((a: Asset) => a.symbol === symbol && !a.symbol.match(/^INIT\.[a-zA-Z0-9]+$/));
-        if (asset) {
-          // Get the base denom amount
-          const supplyAmount = chainData.supplies[asset.base];
-          if (supplyAmount) {
-            // Find the display denom unit to get the exponent
-            const displayUnit = asset.denom_units.find(unit => unit.denom === asset.display);
-            const exponent = displayUnit?.exponent || 0;
-            
-            // Convert to display amount
-            let displayAmount = BigInt(supplyAmount) / BigInt(10 ** exponent);
-            
-            // If this is the source chain for bridged assets, subtract the bridged amounts
-            // Skip subtraction for INIT.{xxx} format assets
-            const bridgedKey = `${chainData.chain_name}:${symbol}`;
-            const bridgedAmount = bridgedAmounts.get(bridgedKey) || BigInt(0);
-            if (bridgedAmount > BigInt(0) && !symbol.match(/^INIT\.[a-zA-Z0-9]+$/)) {
-              console.log(`Subtracting bridged amount for ${symbol} on ${chainData.chain_name}: ${bridgedAmount}`);
-              displayAmount = displayAmount - bridgedAmount;
-              // Ensure we don't go negative
-              if (displayAmount < BigInt(0)) {
-                displayAmount = BigInt(0);
-              }
-            }
-            
-            row[symbol] = displayAmount.toString();
-          } else {
-            row[symbol] = '0';
-          }
-        } else {
-          row[symbol] = null; // This chain doesn't have this asset
-        }
-      });
-
-      return row;
-    });
-
-    // Calculate totals for each symbol
-    const totalRow: Record<string, string | null> = {
-      chain_name: 'total',
-      pretty_name: 'Total',
-    };
-
-    allSymbols.forEach(symbol => {
-      let total = BigInt(0);
-      let hasAnyValue = false;
-
-      tableData.forEach(row => {
-        const value = row[symbol];
-        if (value && value !== '0') {
-          total += BigInt(value);
-          hasAnyValue = true;
-        }
-      });
-
-      totalRow[symbol] = hasAnyValue ? total.toString() : '0';
-    });
-
-    // Add the total row to the data
-    tableData.push(totalRow);
-
-    return NextResponse.json({
-      symbols: Array.from(allSymbols).sort(),
-      data: tableData
-    });
+    return NextResponse.json(data, { headers: cacheHeaders(CACHE_TTL_MS / 1000) });
   } catch (error) {
     console.error('Error in assets-distribution API:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch asset distribution data' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch asset distribution data' }, { status: 500 });
   }
 }

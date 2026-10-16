@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RefreshCw } from 'lucide-react';
+import { fetchJson } from '@/lib/fetch-json';
+import { getAssetList } from '@/lib/registry';
 
 interface PoolCoin {
   denom: string;
@@ -25,38 +27,13 @@ interface Pool {
 
 interface PoolResponse {
   pools: Pool[];
-  pagination: {
-    next_key: string | null;
-    total: string;
-  };
 }
-
-interface Asset {
-  base: string;
-  display: string;
-  symbol: string;
-  denom_units: {
-    denom: string;
-    exponent: number;
-  }[];
-}
-
-interface AssetList {
-  chain_name: string;
-  assets: Asset[];
-}
-
-
 
 interface DashboardDataPoint {
-  liquidity: number;
-  staked_liquidity: number;
-  volume: number;
-  fee: number;
   price: number;
-  apr: number;
-  startTimestamp: string;
-  endTimestamp: string;
+  start_timestamp?: string;
+  /** Older API versions used camelCase keys. */
+  startTimestamp?: string;
 }
 
 interface DashboardResponse {
@@ -67,6 +44,58 @@ interface ChartData {
   time: string;
   timestamp: string;
   [key: string]: string | number;
+}
+
+const DEX_API_URL = 'https://dex-api.initia.xyz/indexer/dex/v2';
+const INIT_DENOM = 'uinit';
+const LST_SYMBOLS = ['milkINIT', 'sINIT', 'xINIT'];
+
+/** Fetches price history for each LST (using its most liquid pool) and merges it into chart rows. */
+async function fetchPriceData(
+  pools: Pool[],
+  assetMap: Map<string, string>,
+  range: string
+): Promise<ChartData[]> {
+  const poolBySymbol = new Map<string, Pool>();
+  for (const pool of pools) {
+    const lstCoin = pool.coins.find((coin) => coin.denom !== INIT_DENOM);
+    const symbol = lstCoin ? assetMap.get(lstCoin.denom) || 'Unknown' : 'Unknown';
+    const current = poolBySymbol.get(symbol);
+    if (!current || pool.liquidity > current.liquidity) poolBySymbol.set(symbol, pool);
+  }
+
+  const results = await Promise.all(
+    [...poolBySymbol].map(async ([symbol, pool]) => {
+      try {
+        const { data } = await fetchJson<DashboardResponse>(
+          `${DEX_API_URL}/dashboard/${pool.lp_metadata}?range=${range}`
+        );
+        return Array.isArray(data) ? { symbol, points: data } : null;
+      } catch (err) {
+        console.error(`Failed to fetch price data for pool ${pool.lp_metadata}:`, err);
+        return null;
+      }
+    })
+  );
+
+  // Combine all price data into a single array for the chart
+  const timeMap = new Map<string, ChartData>();
+  for (const result of results) {
+    if (!result) continue;
+    for (const point of result.points) {
+      const timestamp = point.start_timestamp ?? point.startTimestamp;
+      if (!timestamp) continue;
+      const date = new Date(timestamp);
+      if (!timeMap.has(timestamp)) {
+        timeMap.set(timestamp, { time: `${date.getUTCMonth() + 1}/${date.getUTCDate()}`, timestamp });
+      }
+      timeMap.get(timestamp)![result.symbol] = point.price;
+    }
+  }
+
+  return Array.from(timeMap.values()).sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
 }
 
 // Custom Tooltip Component
@@ -113,182 +142,75 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps) => {
 export default function LSTPoolsPage() {
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
-  const [chartLoading, setChartLoading] = useState(false);
+  const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [assetMap, setAssetMap] = useState<Map<string, string>>(new Map());
-  const [lstDenoms, setLstDenoms] = useState<string[]>([]);
   const [priceData, setPriceData] = useState<ChartData[]>([]);
-  const [visibleLines, setVisibleLines] = useState<Set<string>>(new Set(['milkINIT', 'sINIT', 'xINIT']));
+  const [visibleLines, setVisibleLines] = useState<Set<string>>(new Set(LST_SYMBOLS));
   const [timeRange, setTimeRange] = useState<string>('week');
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
 
+  // Load the asset registry and the pool list in parallel
+  useEffect(() => {
+    const loadPools = async () => {
+      try {
+        const [assetList, poolResponse] = await Promise.all([
+          getAssetList('initia'),
+          fetchJson<PoolResponse>(`${DEX_API_URL}/pools?pagination.limit=1000`),
+        ]);
 
+        const newAssetMap = new Map(assetList.assets.map((asset) => [asset.base, asset.symbol]));
+        const lstDenoms = new Set(
+          assetList.assets
+            .filter((asset) => LST_SYMBOLS.includes(asset.symbol))
+            .map((asset) => asset.base)
+        );
 
-  const fetchAssetRegistry = async () => {
-    try {
-      const response = await fetch('https://registry.initia.xyz/chains/initia/assetlist.json');
-      if (!response.ok) {
-        throw new Error('Failed to fetch asset registry');
-      }
-      const assetList: AssetList = await response.json();
-      
-      const newAssetMap = new Map<string, string>();
-      const lstSymbols = ['milkINIT', 'sINIT', 'xINIT'];
-      const foundLstDenoms: string[] = [];
-      
-      assetList.assets.forEach(asset => {
-        newAssetMap.set(asset.base, asset.symbol);
-        
-        if (lstSymbols.includes(asset.symbol)) {
-          foundLstDenoms.push(asset.base);
-          console.log(`Found LST token ${asset.symbol} with denom: ${asset.base}`);
+        if (!Array.isArray(poolResponse.pools)) {
+          throw new Error('Invalid API response structure');
         }
-      });
-      
-      setAssetMap(newAssetMap);
-      setLstDenoms(foundLstDenoms);
-      console.log('LST denoms found:', foundLstDenoms);
-    } catch (err) {
-      console.error('Error fetching asset registry:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch asset registry');
-    }
-  };
 
-  const fetchPools = useCallback(async () => {
-    try {
-      setLoading(true);
-      
-      const response = await fetch('https://dex-v2-api.staging.initia.xyz/indexer/dex/v2/pools');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch pools: ${response.status}`);
-      }
-      
-      const data: PoolResponse = await response.json();
-      console.log('Pool API response:', data);
-      
-      if (!data || !Array.isArray(data.pools)) {
-        console.error('Unexpected API response structure:', data);
-        throw new Error('Invalid API response structure');
-      }
-      
-      const initDenom = 'uinit';
-      
-      console.log('Using LST denoms from registry:', lstDenoms);
-      
-      const stableSwapPools = data.pools.filter((pool: Pool) => pool.pool_type === 'STABLE_SWAP');
-      console.log('Total STABLE_SWAP pools:', stableSwapPools.length);
-      
-      stableSwapPools.forEach(pool => {
-        const denoms = pool.coins.map(c => c.denom);
-        const symbols = pool.coins.map(c => assetMap.get(c.denom) || c.denom);
-        console.log('Pool coins denoms:', denoms);
-        console.log('Pool coins symbols:', symbols);
-      });
-      
-      const filteredPools = data.pools.filter((pool: Pool) => {
-        if (pool.pool_type !== 'STABLE_SWAP') return false;
-        
-        const denoms = pool.coins.map(coin => coin.denom);
-        
-        if (denoms.length !== 2) return false;
-        
-        const hasInit = denoms.includes(initDenom);
-        const hasLst = lstDenoms.some(lst => denoms.includes(lst));
-        
-        if (hasInit && hasLst) {
-          console.log('Found LST pool - denoms:', denoms);
-          console.log('Symbols:', pool.coins.map(c => assetMap.get(c.denom) || c.denom));
-        }
-        
-        return hasInit && hasLst;
-      });
-      
-      setPools(filteredPools);
-    } catch (err) {
-      console.error('Error fetching pools:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch pools');
-    } finally {
-      setLoading(false);
-    }
-  }, [assetMap, lstDenoms]);
-
-  const fetchPriceData = useCallback(async (pools: Pool[], range: string = 'week') => {
-    try {
-      setChartLoading(true);
-      const pricePromises = pools.map(async (pool) => {
-        const response = await fetch(`https://dex-v2-api.staging.initia.xyz/indexer/dex/v2/dashboard/${pool.lp_metadata}?range=${range}`);
-        if (!response.ok) {
-          console.error(`Failed to fetch price data for pool ${pool.lp_metadata}`);
-          return null;
-        }
-        const data: DashboardResponse = await response.json();
-        console.log(`Dashboard API response for pool ${pool.lp_metadata}:`, data);
-        
-        // Check if data exists in the response
-        if (!data.data || !Array.isArray(data.data)) {
-          console.error(`No data array found in dashboard response for pool ${pool.lp_metadata}`);
-          return null;
-        }
-        
-        // Find the LST symbol for this pool
-        const lstCoin = pool.coins.find(coin => lstDenoms.includes(coin.denom));
-        const lstSymbol = lstCoin ? assetMap.get(lstCoin.denom) || 'Unknown' : 'Unknown';
-        
-        // Transform data to price points
-        const prices = data.data.map(point => ({
-          time: point.startTimestamp,
-          price: point.price.toString()
-        }));
-        
-        return {
-          symbol: lstSymbol,
-          prices
-        };
-      });
-      
-      const results = await Promise.all(pricePromises);
-      const validResults = results.filter(r => r !== null) as Array<{ symbol: string; prices: Array<{ time: string; price: string }> }>;
-      
-      console.log(`Valid results count: ${validResults.length}`);
-      
-      if (validResults.length === 0) {
-        console.error('No valid price data found for any pools');
-        return;
-      }
-      
-      // Combine all price data into a single array for the chart
-      const timeMap = new Map<string, ChartData>();
-      
-      validResults.forEach(result => {
-        if (!result.prices || !Array.isArray(result.prices)) {
-          console.error(`Invalid prices for symbol ${result.symbol}`);
-          return;
-        }
-        
-        result.prices.forEach(pricePoint => {
-          // Use ISO date string for consistent formatting
-          const date = new Date(pricePoint.time);
-          const time = `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
-          
-          if (!timeMap.has(pricePoint.time)) {
-            timeMap.set(pricePoint.time, { time, timestamp: pricePoint.time });
-          }
-          const dataPoint = timeMap.get(pricePoint.time)!;
-          dataPoint[result.symbol] = parseFloat(pricePoint.price);
+        const filteredPools = poolResponse.pools.filter((pool) => {
+          if (pool.pool_type !== 'STABLE_SWAP' || pool.coins.length !== 2) return false;
+          const denoms = pool.coins.map((coin) => coin.denom);
+          return denoms.includes(INIT_DENOM) && denoms.some((denom) => lstDenoms.has(denom));
         });
+
+        setAssetMap(newAssetMap);
+        setPools(filteredPools);
+      } catch (err) {
+        console.error('Error fetching pools:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch pools');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPools();
+  }, []);
+
+  // Load chart data whenever the pools, time range or refresh token change
+  useEffect(() => {
+    if (pools.length === 0) return;
+    let cancelled = false;
+
+    fetchPriceData(pools, assetMap, timeRange)
+      .then((chartData) => {
+        if (!cancelled && chartData.length > 0) setPriceData(chartData);
+      })
+      .catch((err) => console.error('Error fetching price data:', err))
+      .finally(() => {
+        if (!cancelled) {
+          setChartLoading(false);
+          setRefreshing(false);
+        }
       });
-      
-      const chartData = Array.from(timeMap.values()).sort((a, b) => 
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-      
-      setPriceData(chartData);
-    } catch (err) {
-      console.error('Error fetching price data:', err);
-    } finally {
-      setChartLoading(false);
-    }
-  }, [assetMap, lstDenoms]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pools, assetMap, timeRange, refreshToken]);
 
   const toggleLine = (symbol: string) => {
     const newVisible = new Set(visibleLines);
@@ -309,30 +231,12 @@ export default function LSTPoolsPage() {
     return colors[symbol] || '#000000';
   };
 
-  const handleRefresh = async () => {
+  const handleRefresh = () => {
+    if (pools.length === 0) return;
     setRefreshing(true);
-    if (pools.length > 0) {
-      await fetchPriceData(pools, timeRange);
-    }
-    setRefreshing(false);
+    setChartLoading(true);
+    setRefreshToken((token) => token + 1);
   };
-
-  // Effects
-  useEffect(() => {
-    fetchAssetRegistry();
-  }, []);
-
-  useEffect(() => {
-    if (assetMap.size > 0 && lstDenoms.length > 0) {
-      fetchPools();
-    }
-  }, [assetMap, lstDenoms, fetchPools]);
-
-  useEffect(() => {
-    if (pools.length > 0) {
-      fetchPriceData(pools, timeRange);
-    }
-  }, [timeRange, pools, fetchPriceData]);
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -373,7 +277,7 @@ export default function LSTPoolsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <span className="text-sm font-medium text-foreground">Assets:</span>
                   <div className="flex gap-2 flex-wrap">
-                    {['milkINIT', 'sINIT', 'xINIT'].map(symbol => (
+                    {LST_SYMBOLS.map(symbol => (
                       <Button
                         key={symbol}
                         variant={visibleLines.has(symbol) ? "default" : "outline"}
@@ -406,7 +310,11 @@ export default function LSTPoolsPage() {
                         key={range.value}
                         variant={timeRange === range.value ? "default" : "outline"}
                         size="sm"
-                        onClick={() => setTimeRange(range.value)}
+                        onClick={() => {
+                          if (range.value === timeRange) return;
+                          setChartLoading(true);
+                          setTimeRange(range.value);
+                        }}
                         className="px-3 py-1 text-xs"
                       >
                         {range.label}
@@ -495,7 +403,7 @@ export default function LSTPoolsPage() {
                         }
                       }}
                     />
-                    {['milkINIT', 'sINIT', 'xINIT'].map(symbol => (
+                    {LST_SYMBOLS.map(symbol => (
                       visibleLines.has(symbol) && (
                         <Line
                           key={symbol}
@@ -534,8 +442,8 @@ export default function LSTPoolsPage() {
                     </TableHeader>
                     <TableBody>
                       {pools.map((pool) => {
-                        const lstCoin = pool.coins.find(coin => lstDenoms.includes(coin.denom));
-                        const initCoin = pool.coins.find(coin => coin.denom === 'uinit');
+                        const lstCoin = pool.coins.find(coin => coin.denom !== INIT_DENOM);
+                        const initCoin = pool.coins.find(coin => coin.denom === INIT_DENOM);
                         const lstSymbol = lstCoin ? assetMap.get(lstCoin.denom) || 'Unknown' : 'Unknown';
                         const initSymbol = initCoin ? assetMap.get(initCoin.denom) || 'INIT' : 'INIT';
                         

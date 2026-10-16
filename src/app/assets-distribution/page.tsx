@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { RefreshCw, Search, X } from 'lucide-react';
+import { fetchJson } from '@/lib/fetch-json';
+import { useFetch } from '@/lib/hooks/useFetch';
 
 interface AssetDistributionData {
   symbols: string[];
@@ -25,41 +27,16 @@ interface AssetDistributionData {
   }>;
 }
 
+const loadAssetDistribution = () =>
+  fetchJson<AssetDistributionData>('/api/assets-distribution', { timeoutMs: 30_000 });
+
 export default function AssetsDistributionPage() {
-  const [data, setData] = useState<AssetDistributionData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { data, loading: fetching, error, refresh } = useFetch(loadAssetDistribution);
+  // A refresh keeps showing the current table; only the first load shows the skeleton.
+  const refreshing = fetching && data !== null;
+  const loading = fetching && data === null;
   const [chainSearch, setChainSearch] = useState('');
   const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
-
-  const fetchData = async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
-
-    try {
-      const response = await fetch('/api/assets-distribution');
-      if (!response.ok) {
-        throw new Error('Failed to fetch data');
-      }
-      const result: AssetDistributionData = await response.json();
-      setData(result);
-    } catch (err) {
-      console.error('Error fetching asset distribution:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch asset distribution data');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
 
   const formatAmount = (amount: string | null) => {
     if (!amount || amount === '0') return '-';
@@ -153,7 +130,7 @@ export default function AssetsDistributionPage() {
                 Error: {error}
               </div>
               <div className="mt-4 text-center">
-                <Button onClick={() => fetchData()} variant="outline">
+                <Button onClick={refresh} variant="outline">
                   Try Again
                 </Button>
               </div>
@@ -179,7 +156,7 @@ export default function AssetsDistributionPage() {
             </p>
           </div>
           <Button
-            onClick={() => fetchData(true)}
+            onClick={refresh}
             disabled={refreshing}
             variant="outline"
             size="sm"
